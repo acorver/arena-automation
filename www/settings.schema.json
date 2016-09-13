@@ -1,0 +1,110 @@
+{
+  "settings": {
+	"type": "object",
+  "additionalProperties": false,
+	"properties": {
+
+		"cortex": {
+      "title": "Cortex Settings",
+			"type": "object",
+			"additionalProperties": false,
+	    "properties": {
+				"IP_MOTION": {
+					"title": "IP_MOTION",
+					"type": "string"
+				},
+				"IP_CAMERAS": {
+					"title": "IP_CAMERAS",
+					"type": "string"
+				},
+				"CORTEX_FRAME_BUFFER_SIZE": {
+					"title": "CORTEX_FRAME_BUFFER_SIZE",
+					"type": "integer"
+				},
+				"CORTEX_FPS": {
+					"title": "CORTEX_FPS",
+					"type": "integer"
+				}
+			}
+		},
+
+		"photron": {
+      "title": "Photron Settings",
+			"type": "object",
+			"additionalProperties": false,
+	    "properties": {
+				"IP_PHOTRON": {
+					"title": "IP_MOTION",
+					"type": "string"
+				},
+				"IP_PHOTRON_1": {
+					"title": "IP_PHOTRON_1",
+					"type": "string"
+				},
+				"IP_PHOTRON_2": {
+					"title": "IP_PHOTRON_2",
+					"type":"string"
+				},
+				"PHOTRON_FPS": {
+					"title": "PHOTRON_FPS",
+					"type": "integer"
+				},
+				"NUM_CAMERAS": {
+					"title": "NUM_CAMERAS",
+					"type": "integer"
+				},
+				"PHOTRON_EXTRA_FRAMES": {
+					"title": "PHOTRON_EXTRA_FRAMES",
+					"type": "integer"
+				}
+			}
+		},
+
+		"tracking": {
+      "title": "Tracking Settings",
+			"type": "object",
+			"additionalProperties": false,
+	    "properties": {
+				
+				"MAX_BODY_TRACKING_HISTORY": {
+					"title": "MAX_BODY_TRACKING_HISTORY",
+					"type": "integer"
+				},
+				"MAX_BODY_TRACKING_DIST": {
+					"title": "MAX_BODY_TRACKING_DIST",
+					"type": "integer"
+				},
+				"MAX_BODY_TRACKING_GAP": {
+					"title": "MAX_BODY_TRACKING_GAP",
+					"type": "integer"
+				},
+				"TAKEOFF_DETECTION_WINDOW": {
+					"title": "TAKEOFF_DETECTION_WINDOW",
+					"type": "integer"
+				},
+				"TAKEOFF_SPEED_THRESHOLD": {
+					"title": "TAKEOFF_SPEED_THRESHOLD",
+					"type": "integer"
+				},
+				"STATIONARY_DETECTION_WINDOW": {
+					"title": "PHOTRON_EXTRA_FRAMES",
+					"type": "integer"
+				},
+				"STATIONARY_SPEED_THRESHOLD": {
+					"title": "PHOTRON_FPS",
+					"type": "integer"
+				},
+				"RECORDING_THRESHOLD": {
+					"title": "NUM_CAMERAS",
+					"type": "integer"
+				},
+				"DRAGONFLY_DETECTION_MARKER_THRESHOLD": {
+					"title": "PHOTRON_EXTRA_FRAMES",
+					"type": "integer"
+				}
+			}
+		}
+		
+	}
+  }
+}

@@ -1,0 +1,14 @@
+
+<div class="side-menu">
+    <ul class="nav nav-pills nav-stacked">
+      <li role="presentation" class="active"><a href="#" ng-click="recordSample()">Record a sample</a></li>
+      <li role="presentation"><a href="#" ng-click="triggerTTL()">Trigger TTL</a></li>
+    </ul>
+</div>
+
+<div id="container-cameras">
+    <!-- Live image -->
+    <canvas class="img-camera img-photron-camera img-photron-camera-{{$index}}" ng-repeat="camera in cameras.photron track by $index"/>
+
+    <canvas class="img-camera img-usb-camera img-usb-camera-{{$index}}" ng-repeat="camera in cameras.usb track by $index"/>
+</div>

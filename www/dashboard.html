@@ -1,0 +1,33 @@
+
+
+<div id="dashboard-menu" class="side-menu">
+    <ul class="nav nav-pills nav-stacked">
+        <li role="presentation" class="active"><a href="#">Motion Capture</a></li>
+        <li role="presentation"><a href="#">Cameras</a></li>
+        <li role="presentation"><a href="#">Hardware</a></li>
+        <div class="form-group">
+            <input type="text" class="form-control" placeholder="Search log">
+        </div>
+    </ul>
+</div>
+
+<div id="container-log">
+    <div>
+        <ul>
+            <li class="log-msg">
+                {{msg}}
+            </li>
+        </ul>
+    </div>
+    <ul>
+        <li ng-repeat="msg in log track by $index" class="log-msg">
+            {{msg}}
+        </li>
+    </ul>
+</div>
+
+<div id="container-settings">
+    
+    <div id="treema"></div>
+
+</div>

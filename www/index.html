@@ -1,0 +1,56 @@
+﻿<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml" ng-app="arenaApp">
+<head>
+    <meta charset="utf-8" />
+    <title>Dragonfly Arena Interface</title>
+
+    <link rel="stylesheet" href="lib/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="lib/bootstrap/css/bootstrap-theme.min.css">
+
+    <link rel="stylesheet" href="lib/jquery-ui.min.css">
+    <link rel="stylesheet" href="lib/jquery-ui.theme.min.css">
+    <link rel="stylesheet" href="lib/treema/treema.css">
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+<body ng-controller="mainController">
+
+    <!-- Menu bar -->
+    <nav class="navbar navbar-default" role="navigation" bs-navbar>
+    <div class="navbar-header">
+        <a class="navbar-brand" href="#">Dragonfly Arena Interface v.0.0.1</a>
+    </div>
+    <ul class="nav navbar-nav">
+        <li class="active" data-match-route="/$"><a href="#/">Dashboard</a></li>
+        <li data-match-route="/cameras"><a href="#/cameras">High-speed Cameras</a></li>
+        <li data-match-route="/motion"><a href="#/motion">Motion Detection</a></li>
+        <input type="text" ng-model="host.ip" id="input-host-ip" class="form-control"
+        data-trigger="focus" bs-tooltip="Enter the Arena host computer's IP address here.'">
+    </ul>
+    </nav>
+
+    <!-- Main View -->
+    <div id="main">
+        <div ng-view></div>
+    </div>
+
+    <!-- Libraries -->
+    <script src="lib/lodash.js" type="text/javascript"></script>
+    <script src="lib/jquery.min.js" type="text/javascript"></script>
+    <script src="lib/angular.min.js" type="text/javascript"></script>
+    <script src="lib/angular-route.min.js" type="text/javascript"></script>
+    <script src="lib/angular-strap.min.js" type="text/javascript"></script>
+    <script src="lib/angular-strap.tpl.min.js" type="text/javascript"></script>
+    <script src="lib/jquery-ui.min.js" type="text/javascript"></script>
+    <script src="lib/tv4.min.js" type="text/javascript"></script>
+    <script src="lib/treema/treema.js" type="text/javascript"></script>
+    <script src="lib/three.min.js" type="text/javascript"></script>
+    <script src="lib/threejs/Detector.js" type="text/javascript"></script>
+    <script src="lib/threejs/OrbitControls.js" type="text/javascript"></script>
+    <script src="script.js" type="text/javascript"></script>
+
+
+</body>
+</html>
