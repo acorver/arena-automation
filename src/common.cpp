@@ -52,13 +52,10 @@ std::string common::GetTimeStr(const char* pattern) {
 }
 
 void _Save(float startTimeAgo, float endTimeAgo) {
-
+	
 	// TODO: Log on different thread
 	// Log
 	logging::Log("Saving [%f, %f].", startTimeAgo, endTimeAgo);
-
-	// Trigger recording!!
-	hardware::SendTrigger();
 
 	// Determine the prefix to use for saving the data files
 	std::string prefix = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S_");
@@ -70,10 +67,19 @@ void _Save(float startTimeAgo, float endTimeAgo) {
 	usbcamera::Save(prefix, startTimeAgo, endTimeAgo);
 
 	// Save high-speed camera data
-	photron::Save(prefix, startTimeAgo, endTimeAgo);
+	if (photron::IsInitialized()) {
+		photron::Save(prefix, startTimeAgo, endTimeAgo);
+	}
 }
 
 void common::Save(float startTimeAgo, float endTimeAgo) {
+
+	// Trigger recording!!
+	hardware::SendTrigger();
+
+	// Maybe send a system timestamp to thread? That way we can take additional delays into account... (TODO)
+	startTimeAgo += KNOWN_TRIGGER_DELAY;
+	endTimeAgo += KNOWN_TRIGGER_DELAY;
 
 	logging::Log("Starting saving thread [%f, %f].", startTimeAgo, endTimeAgo);
 	boost::thread t(_Save, startTimeAgo, endTimeAgo);

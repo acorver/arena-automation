@@ -24,7 +24,7 @@ void loop() {
         // Write TTL
         digitalWrite(3, HIGH);
         digitalWrite(7, HIGH);
-        delay(10);
+        delay(2000);
         digitalWrite(3, LOW);
         digitalWrite(7, LOW);
         

@@ -16,12 +16,6 @@
     <Filter Include="lib">
       <UniqueIdentifier>{54d0134a-c9e7-40dc-ab1e-7d142c3217fa}</UniqueIdentifier>
     </Filter>
-    <Filter Include="lib\tpl">
-      <UniqueIdentifier>{957de98a-538d-44c2-89eb-db9dec2cbdce}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="lib\tpl\win">
-      <UniqueIdentifier>{5c8ade26-7add-4461-8b13-d2be10646cfb}</UniqueIdentifier>
-    </Filter>
     <Filter Include="lib\serial">
       <UniqueIdentifier>{f0bfd33c-ccec-4ccb-9691-260f52817825}</UniqueIdentifier>
     </Filter>
@@ -45,21 +39,6 @@
     <ClCompile Include="log.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="lib\tpl\tpl.c">
-      <Filter>lib\tpl</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\tpl\win\mmap.c">
-      <Filter>lib\tpl\win</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\tpl\win\nonempty.c">
-      <Filter>lib\tpl\win</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\serial\SerialClass.cpp">
-      <Filter>lib\serial</Filter>
-    </ClCompile>
-    <ClCompile Include="lib\jpeg-compressor\jpge.cpp">
-      <Filter>lib\jpeg-compressor</Filter>
-    </ClCompile>
     <ClCompile Include="photron.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -74,6 +53,12 @@
     </ClCompile>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\lib\jpeg-compressor\jpge.cpp">
+      <Filter>lib\jpeg-compressor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\lib\serial\SerialClass.cpp">
+      <Filter>lib\serial</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -95,18 +80,6 @@
     <ClInclude Include="log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib\tpl\tpl.h">
-      <Filter>lib\tpl</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\tpl\win\mman.h">
-      <Filter>lib\tpl\win</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\serial\SerialClass.h">
-      <Filter>lib\serial</Filter>
-    </ClInclude>
-    <ClInclude Include="lib\jpeg-compressor\jpge.h">
-      <Filter>lib\jpeg-compressor</Filter>
-    </ClInclude>
     <ClInclude Include="photron.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -115,6 +88,12 @@
     </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\lib\jpeg-compressor\jpge.h">
+      <Filter>lib\jpeg-compressor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\lib\serial\SerialClass.h">
+      <Filter>lib\serial</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

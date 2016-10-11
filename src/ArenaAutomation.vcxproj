@@ -76,13 +76,14 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <LibraryPath>$(SolutionDir)lib\ffmpeg_lib;$(SolutionDir)lib\videoInput\;$(SolutionDir)lib\opencv3\x64\vc14\lib;$(UniversalCRT_LibraryPath_x64);$(WindowsSDKDir)lib\x64;$(SolutionDir)lib\boost_lib\;$(SolutionDir)lib\;C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir)lib\ffmpeg;$(SolutionDir)lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)lib\opencv3\include;$(SolutionDir)lib\;$(IncludePath);$(SolutionDir)lib\videoInput\DShow\Include;$(SolutionDir)lib\videoInput\extra;$(SolutionDir)lib\videoInput\glfw</IncludePath>
+    <LibraryPath>$(SolutionDir)..\lib\ffmpeg_lib;$(SolutionDir)..\lib\videoInput\;$(SolutionDir)..\lib\opencv3\x64\vc14\lib;$(UniversalCRT_LibraryPath_x64);$(WindowsSDKDir)lib\x64;$(SolutionDir)..\lib\boost_lib\;$(SolutionDir)..\lib\;C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\;$(IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
     <ExcludePath>$(VC_IncludePath);$(WindowsSdk_71A_IncludePath);$(MSBuild_ExecutablePath);</ExcludePath>
     <ReferencePath>$(ReferencePath)</ReferencePath>
     <CustomBuildAfterTargets />
     <TargetName>$(ProjectName)</TargetName>
-    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)..\build\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)..\build\intermediate\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -91,8 +92,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <LibraryPath>$(SolutionDir)lib\ffmpeg_lib;$(SolutionDir)lib\videoInput\;$(SolutionDir)lib\opencv3\x64\vc14\lib;$(UniversalCRT_LibraryPath_x64);$(WindowsSDKDir)lib\x64;$(SolutionDir)lib\boost_lib\;$(SolutionDir)lib\;C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64;$(LibraryPath)</LibraryPath>
-    <IncludePath>$(SolutionDir)lib\ffmpeg;$(SolutionDir)lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)lib\opencv3\include;$(SolutionDir)lib\;$(IncludePath);$(SolutionDir)lib\videoInput\DShow\Include;$(SolutionDir)lib\videoInput\extra;$(SolutionDir)lib\videoInput\glfw</IncludePath>
+    <LibraryPath>$(SolutionDir)..\lib\ffmpeg_lib;$(SolutionDir)..\lib\videoInput\;$(SolutionDir)..\lib\opencv3\x64\vc14\lib;$(UniversalCRT_LibraryPath_x64);$(WindowsSDKDir)lib\x64;$(SolutionDir)..\lib\boost_lib\;$(SolutionDir)..\lib\;C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\;$(IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
     <ReferencePath>$(ReferencePath)</ReferencePath>
     <CustomBuildAfterTargets />
   </PropertyGroup>
@@ -128,7 +129,8 @@
       <AdditionalOptions> /Zm500 /HEAP:24000000000 /LARGEADDRESSAWARE %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
-      <Command>deploy_debug_exe.bat</Command>
+      <Command>
+      </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -177,6 +179,12 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\lib\jpeg-compressor\jpge.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\lib\serial\SerialClass.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="common.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
     </ClCompile>
@@ -185,24 +193,6 @@
     </ClCompile>
     <ClCompile Include="hardware.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="lib\jpeg-compressor\jpge.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="lib\serial\SerialClass.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="lib\tpl\tpl.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="lib\tpl\win\mmap.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
-    <ClCompile Include="lib\tpl\win\nonempty.c">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="log.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
@@ -225,13 +215,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\lib\jpeg-compressor\jpge.h" />
+    <ClInclude Include="..\lib\serial\SerialClass.h" />
     <ClInclude Include="photron.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="hardware.h" />
-    <ClInclude Include="lib\jpeg-compressor\jpge.h" />
-    <ClInclude Include="lib\serial\SerialClass.h" />
-    <ClInclude Include="lib\tpl\tpl.h" />
-    <ClInclude Include="lib\tpl\win\mman.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="motion.h" />
     <ClInclude Include="server.h" />

@@ -43,11 +43,15 @@ int				saveFramesMaxIndex = -1;
 std::queue<sFrameOfData> saveBuffer;
 int				nextBodyIndex = 0;
 
-bool			motionLogEnabled = true; // CHANGE THIS FOR FULL LOGGNG INFO
 int				totalBufferedFrames = 0;
 
 unsigned long lastSavedFrameID;
 std::deque<sFrameOfData*> recentlySavedFrames;
+
+bool g_bMotionTriggerEnabled = true;
+
+std::ofstream g_fsMotionDebugInfo;
+bool g_bMotionDebugEnabled = true;
 
 // ----------------------------------------------
 // Name:  init()
@@ -108,6 +112,9 @@ int motion::Init( boost::thread* pThread ) {
 		return 1;
 	}
 
+	// Initialize debug info for evaluating motion tracking data in real time
+	g_fsMotionDebugInfo = std::ofstream("data/motionlog.txt");
+
 	// Initialize separate thread
 	boost::thread t1(motion::WatchFrameBuffer);
 	boost::thread t2(motion::WatchFrameBufferSave);
@@ -117,7 +124,11 @@ int motion::Init( boost::thread* pThread ) {
 }
 
 void motion::SetLogEnabled(bool enabled) {
-	motionLogEnabled = enabled;
+	g_bMotionDebugEnabled = enabled;
+}
+
+void motion::EnableMotionTrigger(bool enabled) {
+	g_bMotionTriggerEnabled = enabled;
 }
 
 // ----------------------------------------------
@@ -430,10 +441,8 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 		pBody->positionHistory.push_front(p);
 
 		// Write each marker and the body it was assigned to
-		if (motionLogEnabled) {
-			logging::Log("[D]marker,%d,%d,%f,%f,%f\n",
-				frameOfData->iFrame, pBody->iBody,
-				m[0], m[1], m[2]);
+		if (g_bMotionDebugEnabled) {
+			g_fsMotionDebugInfo << "marker," << frameOfData->iFrame << "," << pBody->iBody << "," << m[0] << "," << m[1] << "," << m[2] << "\n";
 		}
 	}
 
@@ -491,10 +500,8 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 		pPosHist->numMarkers += 1;
 
 		// Write each marker and the body it was assigned to
-		if (motionLogEnabled) {
-			logging::Log("[D]marker,%d,%d,%f,%f,%f\n",
-				frameOfData->iFrame, pBody->iBody,
-				markers[j][0], markers[j][1], markers[j][2]);
+		if (g_bMotionDebugEnabled) {
+			g_fsMotionDebugInfo << "marker" << frameOfData->iFrame << "," << pBody->iBody << "," << markers[j][0] << "," << markers[j][1] << "," << markers[j][2] << "\n";
 		}
 	}
 
@@ -560,20 +567,21 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 			}
 
 			// Log data
-			if (motionLogEnabled) {
-				logging::Log("[D]takeoff,%d,%d,%d", frameOfData->iFrame, bodies[i].iBody, bodies[i].takeOffStartFrame);
+			logging::Log("[MOTION] Detected takeoff with peak velocity %f, marker num %f", bodies[i].avgTakeoffSpeed, bodies[i].avgTakeoffMarkerNum);
+			if (g_bMotionDebugEnabled) {
+				g_fsMotionDebugInfo << "takeoff," << frameOfData->iFrame << "," << bodies[i].iBody << "," << bodies[i].takeOffStartFrame << "\n";
 			}
 		}
 
 		// Log info
-		if (motionLogEnabled) {
-			logging::Log("[D]body,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f,%f",
-				frameOfData->iFrame, bodies[i].iBody,
-				bodies[i].positionHistory[0].position[0],
-				bodies[i].positionHistory[0].position[1],
-				bodies[i].positionHistory[0].position[2],
-				bodies[i].avgTakeoffSpeed, bodies[i].avgTakeoffAcceleration, bodies[i].avgTakeoffMarkerNum,
-				bodies[i].avgStationarySpeed, bodies[i].avgStationaryAcceleration, bodies[i].avgStationaryMarkerNum);
+		if (g_bMotionDebugEnabled) {
+			g_fsMotionDebugInfo << "body," <<
+				frameOfData->iFrame << "," << bodies[i].iBody << "," <<
+				bodies[i].positionHistory[0].position[0] << "," <<
+				bodies[i].positionHistory[0].position[1] << "," <<
+				bodies[i].positionHistory[0].position[2] << "," <<
+				bodies[i].avgTakeoffSpeed << "," << bodies[i].avgTakeoffAcceleration << "," << bodies[i].avgTakeoffMarkerNum << 
+				bodies[i].avgStationarySpeed << "," << bodies[i].avgStationaryAcceleration << "," << bodies[i].avgStationaryMarkerNum << "\n";
 		}
 	}
 
@@ -594,9 +602,13 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 				&& (frameOfData->iFrame - bodies[i].takeOffStartFrame < RECORDING_THRESHOLD)) {
 				allStationary = false;
 			} else {
+				if (frameOfData->iFrame - bodies[i].takeOffStartFrame > RECORDING_THRESHOLD && 
+					bodies[i].avgStationarySpeed > STATIONARY_SPEED_THRESHOLD) {
+					logging::Log("[MOTION] Forced detection of landing as recording duration maximum (%d frames) was reached.", RECORDING_THRESHOLD);
+				}
 				// Log data
-				if (motionLogEnabled) {
-					logging::Log("[D]landing,%d,%d,%d", frameOfData->iFrame, bodies[i].iBody, frameOfData->iFrame - STATIONARY_DETECTION_WINDOW/2);
+				if (g_bMotionDebugEnabled) {
+					g_fsMotionDebugInfo << "landing," << frameOfData->iFrame << "," << bodies[i].iBody << "," << frameOfData->iFrame - STATIONARY_DETECTION_WINDOW << "\n";
 				}
 			}
 		}
@@ -610,11 +622,15 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 		float startTimeAgo = (frameOfData->iFrame - takeOffStartFrame) / float(CORTEX_FPS);
 		float endTimeAgo = (frameOfData->iFrame - takeOffEndFrame) / float(CORTEX_FPS);
 
-		// Save data from this frame
-		common::Save(startTimeAgo, endTimeAgo);
-
 		// Always log basic information
 		logging::Log("[D] Takeoff window [-%f,-%f] with respect to now.", startTimeAgo, endTimeAgo);
+
+		// Save data from this frame
+		if (g_bMotionTriggerEnabled) {
+			common::Save(startTimeAgo, endTimeAgo);
+		} else {
+			logging::Log("[MOTION] Not saving takeoff as motion triggering is currently disabled.");
+		}
 
 		// Reset all
 		for (int i = 0; i < bodies.size(); i++) {

@@ -4,8 +4,6 @@
 
 #ifndef ELPP_INITIALIZED
 #define ELPP_INITIALIZED
-#define ELPP_THREAD_SAFE
-#include "lib/easyloggingpp/easylogging++.h"
 INITIALIZE_EASYLOGGINGPP
 #endif
 
@@ -21,7 +19,7 @@ std::string buffer[1000];
 void logging::Init() {
 
 	// Load configuration from file
-	el::Configurations conf("Z:/people/Abel/ArenaAutomation/deploy/settings/log.conf");
+	el::Configurations conf("./settings/log.conf");
 	el::Loggers::reconfigureAllLoggers(conf);
 
 	vCacheLock = false;
@@ -74,13 +72,16 @@ void logging::Log(const char* msg, ...) {
 }
 
 std::vector<std::string> logging::GetCache() {
+	while (vCacheLock) { boost::this_thread::sleep_for(boost::chrono::milliseconds(1)); }
 	return vCache;
 }
 
 std::string logging::GetCache(int index) {
+	while (vCacheLock) { boost::this_thread::sleep_for(boost::chrono::milliseconds(1)); }
 	return vCache[index];
 }
 
 int logging::GetCacheSize() {
+	while (vCacheLock) { boost::this_thread::sleep_for(boost::chrono::milliseconds(1)); }
 	return vCache.size();
 }

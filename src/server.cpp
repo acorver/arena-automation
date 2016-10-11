@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "server.h"
+#include "motion.h"
 #include "photron.h"
 #include "hardware.h"
 #include "usbcamera.h"
@@ -30,14 +31,22 @@ void server::Run() {
 		return CreateCrowResponse("This server reports the status of ongoing experiments in the dragonfly arena.");
 	});
 
-	CROW_ROUTE(app, "/api/camera/photron/<int>")
-		([](int camera) {
+	CROW_ROUTE(app, "/api/takeoff-trigger/<int>")
+		([](int enable) {
+
+		motion::EnableMotionTrigger(enable == 1);
+
+		return CreateCrowResponse("OK");
+	});
+
+	CROW_ROUTE(app, "/api/camera/photron/<int>/<int>")
+		([](int camera, int unused) {
 
 		return CreateCrowResponse(photron::GetLiveImage(camera));
 	});
 
-	CROW_ROUTE(app, "/api/camera/usb/<int>")
-		([](int camera) {
+	CROW_ROUTE(app, "/api/camera/usb/<int>/<int>")
+		([](int camera, int unused) {
 
 		return CreateCrowResponse(usbcamera::GetLiveImage(camera));
 	});
@@ -47,6 +56,8 @@ void server::Run() {
 
 		std::string prefix = common::GetTimeStr("./data/manualsave_%Y-%m-%d %H-%M-%S_");
 		
+		hardware::SendTrigger();
+
 		photron::Save(prefix,1,0);
 
 		return CreateCrowResponse("OK");

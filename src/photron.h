@@ -20,6 +20,8 @@ namespace photron {
 
 	int Init( boost::thread* pThread );
 
+	bool IsInitialized();
+
 	void UpdateLiveImage();
 
 	unsigned long StartRecording();

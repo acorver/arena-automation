@@ -3,15 +3,20 @@
 #include "settings.h"
 
 json g_Settings;
+std::map<const char*, json> g_SettingsMap;
 
 void settings::Init() {
 
 	LoadSettings();
 }
 
+json settings::GetSetting(const char* key) {
+	return g_SettingsMap[key];
+}
+
 void settings::LoadSettings() {
 
-	std::ifstream i("Z:/people/Abel/ArenaAutomation/deploy/settings/settings.json");
+	std::ifstream i("./settings/settings.json");
 	std::stringstream buffer;
 	buffer << i.rdbuf();
 	i.close();
@@ -20,7 +25,7 @@ void settings::LoadSettings() {
 
 void settings::SaveSettings() {
 
-	std::ofstream o("Z:/people/Abel/ArenaAutomation/deploy/settings/settings.json");
+	std::ofstream o("./settings/settings.json");
 	o << settings::GetSettingsJSON();
 	o.close();
 
@@ -31,6 +36,8 @@ void _CallSettingsChangedHandler(std::string path, json* oldS, json* newS) {
 }
 
 void _CompareSettings(std::string path, json* oldS, json* newS) {
+
+	// In the future use JSON Patch (now supported by JSON library)
 
 	// Have the types of the settings changed? If so, they can't be the same
 	if ( oldS->type() != newS->type() ) {
@@ -63,10 +70,24 @@ void _CompareSettings(std::string path, json* oldS, json* newS) {
 	}
 }
 
+void _Index(std::string path, json s) {
+	if (s.is_object()) {
+		for (json::iterator it = s.begin(); it != s.end(); ++it) {
+			_Index(path + "." + it.key(), it.value());
+		}
+	} else {
+		g_SettingsMap[path.c_str()] = s;
+	}
+}
+
 void settings::SetSettings(json s) {
 
 	json oldSettings(g_Settings);
 	g_Settings = s;
+
+	// Update key-value pairs for quick indexing
+	g_SettingsMap.clear();
+	_Index("",oldSettings);
 
 	// Compute difference
 	_CompareSettings("", &oldSettings, &g_Settings);
@@ -85,7 +106,7 @@ std::string settings::GetSettingsJSON() {
 
 void settings::SetSettingsJSON(std::string str) {
 
-	g_Settings = json::parse(str);
+	settings::SetSettings(json::parse(str));
 }
 
 void settings::RegisterHandler(const char* strKey, void(*fHandler)(void* pValue)) {

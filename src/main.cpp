@@ -41,10 +41,12 @@ int main() {
 	//nResult = usbcamera::Init(&t4);
 
 	// Attempt to initialize motion processing
-	//nResult = motion::Init( &t2 );
+	nResult = motion::Init( &t2 );
 
 	// Attempt to initialize photron cameras
-	nResult = photron::Init(&t3);
+	if (settings::GetSettings()["settings"]["photron"]["enabled"] ) {
+		nResult = photron::Init(&t3);
+	}
 
 	// Join on all threads (prevent program from exiting)
 	t1.join();

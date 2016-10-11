@@ -92,6 +92,8 @@ namespace motion {
 
 	void GetMarkers();
 
+	void EnableMotionTrigger(bool enabled);
+
 	void Save(std::string prefix, float startTimeAgo, float endTimeAgo);
 
 	void SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF);

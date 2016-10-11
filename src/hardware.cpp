@@ -7,6 +7,7 @@
 //
 
 #include "hardware.h"
+#include "photron.h"
 
 Serial* pSerial = 0;
 bool initialized = false;
@@ -64,11 +65,11 @@ void hardware::SendTrigger() {
 		logging::Log("[HARDWARE] Error connecting to serial port.");
 	}
 
-	pSerial->WriteData("t\n", 1);
+	pSerial->WriteData("t", 1);
 
 	for (int i = 0; i < 10; i++) {
 		pSerial->ReadData(serialBuffer, 128);
-		if (std::string(serialBuffer) == "!") {
+		if (serialBuffer[0] == '!') {
 			break;
 		} 
 	}

@@ -129,9 +129,9 @@ arenaApp.controller('camerasController', function($scope, $rootScope, $http) {
                         canvas.height = image.naturalHeight;
                         canvas.getContext('2d').drawImage(this, 0, 0);
                     };
-                    image.src = $rootScope.host.ip + '/api/camera/'+_type+'/'+_cameraID;
+                    image.src = $rootScope.host.ip + '/api/camera/'+_type+'/'+_cameraID+'/'+ Math.floor(Math.random()*10000);
                 }
-            }})(cameraID, type), cameraID * 300 + Object.keys($scope.cameras).length * 33);
+            }})(cameraID, type), cameraID * 600 + Object.keys($scope.cameras).length * 450);
         }
     }
 });
