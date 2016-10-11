@@ -156,9 +156,9 @@ unsigned long photron::SetPlaybackMode(unsigned long nDeviceNo, unsigned long *n
 			if (nRet == PDC_FAILED) {
 				logging::Log("[CAMERA] PDC_SetStatus Error %d. Retrying...", *nErrorCode);
 				tries += 1;
-				if (tries > PHOTRON_SET_STATUS_MAX_RETRIES) { 
+				if (tries > settings::GetSetting<int>("photron.set_status_max_retries")) { 
 					logging::Log("[CAMERA] After %d tries, camera %d could not be switched to playback mode (error %d). Aborting...", 
-						PHOTRON_SET_STATUS_MAX_RETRIES, nDeviceNo, *nErrorCode);
+						settings::GetSetting<int>("photron.set_status_max_retries"), nDeviceNo, *nErrorCode);
 					return PDC_FAILED;
 				}
 			}
@@ -423,7 +423,7 @@ int photron::Init(boost::thread* pThread) {
 	unsigned long nSize = 0;
 	unsigned long nChildNo = 0;
 
-	unsigned long nDeviceNos[NUM_CAMERAS];  /* Device numbers */
+	unsigned long* nDeviceNos = new unsigned long[settings::GetSetting<int>("photron.camera_count")];  /* Device numbers */
 	unsigned long nChildNos[PDC_MAX_DEVICE];
 	unsigned long list[PDC_MAX_LIST_NUMBER];
 	unsigned long IPList[PDC_MAX_DEVICE];   /* IP address to be searched */
@@ -445,7 +445,7 @@ int photron::Init(boost::thread* pThread) {
 	memset(&DetectNumInfo, 0, sizeof(PDC_DETECT_NUM_INFO));
 
 	// Set the IP to be searched
-	IPList[0] = IP_PHOTRON;
+	IPList[0] = settings::GetSetting<unsigned long>("photron.ip");
 
 	// Initialize Photron
 	nRet = PDC_Init(&nErrorCode);
@@ -455,11 +455,11 @@ int photron::Init(boost::thread* pThread) {
 	}
 
 	// Detect cameras
-	while (DetectNumInfo.m_nDeviceNum != NUM_CAMERAS) {
+	while (DetectNumInfo.m_nDeviceNum != settings::GetSetting<int>("photron.camera_count")) {
 		nRet = PDC_DetectDevice(
 			PDC_INTTYPE_G_ETHER, /* Gigabit-Ether I/F */
 			IPList,             /* IP address */
-			NUM_CAMERAS,         /* Maximum number of searched devices */
+			settings::GetSetting<int>("photron.camera_count"),         /* Maximum number of searched devices */
 			PDC_DETECT_AUTO,     /* Specifies an IP address explicitly */
 			&DetectNumInfo,
 			&nErrorCode);
@@ -475,7 +475,7 @@ int photron::Init(boost::thread* pThread) {
 	}
 
 	// When two devices are not detected 
-	if (DetectNumInfo.m_nDeviceNum != NUM_CAMERAS) {
+	if (DetectNumInfo.m_nDeviceNum != settings::GetSetting<int>("photron.camera_count")) {
 		logging::Log("[CAMERA] Unexpected number of cameras found. Is this a problem?");
 	}
 
@@ -705,6 +705,9 @@ int photron::Init(boost::thread* pThread) {
 
 	g_bPhotronIsInit = true;
 
+	// Clean up
+	delete[] nDeviceNos;
+
 	// Done!
 	return 0;
 }
@@ -852,7 +855,7 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 	unsigned long nRet, nErrorCode, nMode, nStatus = -1;
 	std::chrono::high_resolution_clock::time_point startTime =
 		std::chrono::high_resolution_clock::now();
-	std::ptrdiff_t nSize = (nByteSize / PHOTRON_SAVE_FRAME_SKIP) + 1024*1024;
+	std::ptrdiff_t nSize = (nByteSize / settings::GetSetting<int>("photron.saved_frame_increment")) + 1024*1024;
 	unsigned char *pBuf = (unsigned char*)malloc(nSize); // new unsigned char[nByteSize];
 
 	int imgcols = 1024, imgrows = 1024, elemSize = 1;
@@ -893,14 +896,14 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 	logging::Log("[CAMERA] Camera %d started downloading frames [%d to %d].", cameraInfo[i].nDeviceNo, iStartFrame, iEndFrame);
 
 	// Download each frame
-	for (int f = iStartFrame; f <= iEndFrame; f+=PHOTRON_SAVE_FRAME_SKIP) {
+	for (int f = iStartFrame; f <= iEndFrame; f+=settings::GetSetting<int>("photron.saved_frame_increment")) {
 		while (true) {
 			nRet = PDC_GetMemImageData(
 				cameraInfo[i].nDeviceNo,
 				cameraInfo[i].nChildNos[c],
 				f,
 				8, // TODO: CHANGE THIS TO 10 OR 12 LATER!!! (??)
-				pBuf + (std::ptrdiff_t(f - iStartFrame)/PHOTRON_SAVE_FRAME_SKIP) * std::ptrdiff_t(1024 * 1024),
+				pBuf + (std::ptrdiff_t(f - iStartFrame)/settings::GetSetting<int>("photron.saved_frame_increment")) * std::ptrdiff_t(1024 * 1024),
 				&nErrorCode);
 
 			if ((f - iStartFrame) % 100 == 0) {
@@ -1013,8 +1016,8 @@ void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo)
 					cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c], frameInfo.m_nRecordedFrames);
 			}
 
-			iStartFrame = long(frameInfo.m_nEnd - startTimeAgo * PHOTRON_FPS - PHOTRON_EXTRA_FRAMES_BEFORE);
-			iEndFrame = long(frameInfo.m_nEnd - endTimeAgo * PHOTRON_FPS + PHOTRON_EXTRA_FRAMES_AFTER);
+			iStartFrame = long(frameInfo.m_nEnd - startTimeAgo * settings::GetSetting<int>("photron.fps") - settings::GetSetting<int>("photron.saved_frames_before"));
+			iEndFrame   = long(frameInfo.m_nEnd - endTimeAgo   * settings::GetSetting<int>("photron.fps") + settings::GetSetting<int>("photron.saved_frames_after"));
 
 			// Make sure the start/end frame don't exceed the recorded range
 			if (iStartFrame < frameInfo.m_nStart) {
@@ -1027,9 +1030,9 @@ void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo)
 				logging::Log("[CAMERA] End frame exceeds range recorded by Photron. Trimming the recording...");
 			}
 
-			if (iEndFrame > iStartFrame + PHOTRON_MAX_SAVE_FRAMES) {
-				iEndFrame = iStartFrame + PHOTRON_MAX_SAVE_FRAMES;
-				logging::Log("[CAMERA] Photron set to record maximum of %d frames. Trimming the recording...", PHOTRON_MAX_SAVE_FRAMES);
+			if (iEndFrame > iStartFrame + settings::GetSetting<int>("photron.max_frames_saved")) {
+				iEndFrame = iStartFrame + settings::GetSetting<int>("photron.max_frames_saved");
+				logging::Log("[CAMERA] Photron set to record maximum of %d frames. Trimming the recording...", settings::GetSetting<int>("photron.max_frames_saved"));
 
 			}
 

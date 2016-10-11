@@ -10,10 +10,6 @@ void settings::Init() {
 	LoadSettings();
 }
 
-json settings::GetSetting(const char* key) {
-	return g_SettingsMap[key];
-}
-
 void settings::LoadSettings() {
 
 	std::ifstream i("./settings/settings.json");

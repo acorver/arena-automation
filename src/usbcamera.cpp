@@ -158,7 +158,7 @@ void usbcamera::UpdateLiveImage() {
 			cvtColor(canny, debug, CV_GRAY2BGR);
 			bufferFrames.push_front(frame.clone()); // TODO: Is clone() necessary?
 			bufferFramesDebug.push_front(debug.clone()); // TODO: Is clone() necessary?
-			if (bufferFrames.size() > USBCAMERA_BUFFER_SIZE) {
+			if (bufferFrames.size() > settings::GetSetting<int>("usbcamera.buffer_size")) {
 				bufferFrames.pop_back();
 				bufferFramesDebug.pop_back();
 			}
@@ -195,8 +195,8 @@ std::string usbcamera::GetLiveImage(int index) {
 
 void usbcamera::Save( std::string prefix, float startTimeAgo, float endTimeAgo ) {
 
-	int startFrame = int(startTimeAgo * USBCAMERA_FPS);
-	int   endFrame = int(  endTimeAgo * USBCAMERA_FPS);
+	int startFrame = int(startTimeAgo * settings::GetSetting<int>("usbcamera.fps"));
+	int   endFrame = int(  endTimeAgo * settings::GetSetting<int>("usbcamera.fps"));
 
 	if (bufferFrames.size() == 0) {
 		return;

@@ -34,7 +34,7 @@ nanoflann::KDTreeSingleIndexAdaptor<
 boost::atomic<int> g_nLastFrameIndex;
 
 //std::deque<sFrameOfData>	bufferedFrames;
-//sFrameOfData	bufferedFrames[CORTEX_FRAME_BUFFER_SIZE];
+//sFrameOfData	bufferedFrames[settings::GetSetting("cortex.frame_buffer_size")];
 //int				bufferedFramesStart;
 //int				bufferedFramesEnd;
 std::vector<motion::Body> bodies;
@@ -302,27 +302,27 @@ void ComputeMotionProps(std::deque<motion::PositionHistory> &markers, int offset
 
 void motion::Body::Update() {
 
-	if (this->positionHistory.size() < TAKEOFF_DETECTION_WINDOW ||
-		this->positionHistory.size() < STATIONARY_DETECTION_WINDOW) { return; }
+	if (this->positionHistory.size() < settings::GetSetting<int>("tracking.takeoff_detection_window") ||
+		this->positionHistory.size() < settings::GetSetting<int>("tracking.stationary_detection_window")) { return; }
 
 	PositionHistory* p = &(this->positionHistory.front());
-	PositionHistory* pt = &(this->positionHistory[TAKEOFF_DETECTION_VELOCITY_SPAN - 1]);
-	p->velocity = norm_2(p->position - pt->position) * CORTEX_ANALYSIS_FPS / float(TAKEOFF_DETECTION_WINDOW);
-	PositionHistory* ps = &(this->positionHistory[STATIONARY_DETECTION_WINDOW-1]);
+	PositionHistory* pt = &(this->positionHistory[settings::GetSetting<int>("tracking.takeoff_detection_velocity_span") - 1]);
+	p->velocity = norm_2(p->position - pt->position) * settings::GetSetting<int>("cortex.fps_analysis") / float(settings::GetSetting<int>("tracking.takeoff_detection_window"));
+	PositionHistory* ps = &(this->positionHistory[settings::GetSetting<int>("tracking.stationary_detection_window")-1]);
 	
 	// Occasionally, we fully recompute the averages to prevent accumulated floating precision errors
 	// from biasing our values
 	numUpdates++;
-	if (numUpdates >= 0 || this->positionHistory.size() == TAKEOFF_DETECTION_WINDOW ||
-			this->positionHistory.size() == STATIONARY_DETECTION_WINDOW) {
+	if (numUpdates >= 0 || this->positionHistory.size() == settings::GetSetting<int>("tracking.takeoff_detection_window") ||
+			this->positionHistory.size() == settings::GetSetting<int>("tracking.stationary_detection_window")) {
 		numUpdates = 0;
 
 		// Compute takeoff statistics
-		ComputeMotionProps(this->positionHistory, 0, TAKEOFF_DETECTION_WINDOW,
+		ComputeMotionProps(this->positionHistory, 0, settings::GetSetting<int>("tracking.takeoff_detection_window"),
 			&this->avgTakeoffSpeed, &this->avgTakeoffAcceleration, &this->avgTakeoffMarkerNum);
 
 		// Compute stationary statistics
-		ComputeMotionProps(this->positionHistory, 0, STATIONARY_DETECTION_WINDOW,
+		ComputeMotionProps(this->positionHistory, 0, settings::GetSetting<int>("tracking.stationary_detection_window"),
 			&this->avgStationarySpeed, &this->avgStationaryAcceleration, &this->avgStationaryMarkerNum);
 
 		return;
@@ -333,35 +333,35 @@ void motion::Body::Update() {
 	// window size rather than actual buffer. Potential TODO.)
 	p = &(this->positionHistory.front());
 
-	this->avgTakeoffSpeed        += p->velocity     / float(TAKEOFF_DETECTION_WINDOW);
-	//this->avgTakeoffAcceleration += p->acceleration / float(TAKEOFF_DETECTION_WINDOW);
-	this->avgTakeoffMarkerNum    += p->numMarkers   / float(TAKEOFF_DETECTION_WINDOW);
+	this->avgTakeoffSpeed        += p->velocity     / float(settings::GetSetting<int>("tracking.takeoff_detection_window"));
+	//this->avgTakeoffAcceleration += p->acceleration / float(settings::GetSetting("tracking.takeoff_detection_window"));
+	this->avgTakeoffMarkerNum    += p->numMarkers   / float(settings::GetSetting<int>("tracking.takeoff_detection_window"));
 
-	//this->avgStationarySpeed        += p->velocity     / float(STATIONARY_DETECTION_WINDOW);
-	//this->avgStationaryAcceleration += p->acceleration / float(STATIONARY_DETECTION_WINDOW);
-	this->avgStationaryMarkerNum    += p->numMarkers   / float(STATIONARY_DETECTION_WINDOW);
+	//this->avgStationarySpeed        += p->velocity     / float(settings::GetSetting("tracking.stationary_detection_window"));
+	//this->avgStationaryAcceleration += p->acceleration / float(settings::GetSetting("tracking.stationary_detection_window"));
+	this->avgStationaryMarkerNum    += p->numMarkers   / float(settings::GetSetting<int>("tracking.stationary_detection_window"));
 
 	// De-average frames that just moved out of the averaging window
-	if (this->positionHistory.size() >= TAKEOFF_DETECTION_WINDOW) {
-		p = &(this->positionHistory[TAKEOFF_DETECTION_WINDOW-1]);
+	if (this->positionHistory.size() >= settings::GetSetting<int>("tracking.takeoff_detection_window")) {
+		p = &(this->positionHistory[settings::GetSetting<int>("tracking.takeoff_detection_window")-1]);
 	
-		this->avgTakeoffSpeed        -= p->velocity     / float(TAKEOFF_DETECTION_WINDOW);
-		//this->avgTakeoffAcceleration -= p->acceleration / float(TAKEOFF_DETECTION_WINDOW);
-		this->avgTakeoffMarkerNum    -= p->numMarkers   / float(TAKEOFF_DETECTION_WINDOW);
+		this->avgTakeoffSpeed        -= p->velocity     / float(settings::GetSetting<int>("tracking.takeoff_detection_window"));
+		//this->avgTakeoffAcceleration -= p->acceleration / float(settings::GetSetting("tracking.takeoff_detection_window"));
+		this->avgTakeoffMarkerNum    -= p->numMarkers   / float(settings::GetSetting<int>("tracking.takeoff_detection_window"));
 	}
 
-	if (this->positionHistory.size() >= STATIONARY_DETECTION_WINDOW) {
-		p = &(this->positionHistory[STATIONARY_DETECTION_WINDOW-1]);
+	if (this->positionHistory.size() >= settings::GetSetting<int>("tracking.stationary_detection_window")) {
+		p = &(this->positionHistory[settings::GetSetting<int>("tracking.stationary_detection_window")-1]);
 
-		//this->avgStationarySpeed        -= p->velocity     / float(STATIONARY_DETECTION_WINDOW);
-		//this->avgStationaryAcceleration -= p->acceleration / float(STATIONARY_DETECTION_WINDOW);
-		this->avgStationaryMarkerNum    -= p->numMarkers   / float(STATIONARY_DETECTION_WINDOW);
+		//this->avgStationarySpeed        -= p->velocity     / float(settings::GetSetting("tracking.stationary_detection_window"));
+		//this->avgStationaryAcceleration -= p->acceleration / float(settings::GetSetting("tracking.stationary_detection_window"));
+		this->avgStationaryMarkerNum    -= p->numMarkers   / float(settings::GetSetting<int>("tracking.stationary_detection_window"));
 	}
 
 	this->avgStationarySpeed = this->avgTakeoffSpeed;
 
 	// Remove points that are too old
-	if (this->positionHistory.size() > MAX_BODY_TRACKING_HISTORY) {
+	if (this->positionHistory.size() > settings::GetSetting<int>("tracking.max_body_tracking_history")) {
 		this->positionHistory.pop_back();
 	}
 }
@@ -376,7 +376,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 	if ( (frameOfData->iFrame % 2) == 0) { return;  }
 
 	//   o Add unlabeled markers
-	if (CORTEX_ENABLE_UNMARKED_DETECTION) {
+	if (settings::GetSetting<bool>("cortex.track_unidentified_markers")) {
 		for (int i = 0; i < frameOfData->nUnidentifiedMarkers; i++) {
 			markers.push_back(CortexToBoostVector(frameOfData->UnidentifiedMarkers[i]));
 		}
@@ -394,7 +394,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 		/*
 		int valid = 0;
 		for (int j = 0; j < frameOfData->BodyData[i].nMarkers; j++) {
-			if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_IDENTIFIED_MARKER_INVALID) { continue; }
+			if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_INVALID_MARKER) { continue; }
 			m += CortexToBoostVector(frameOfData->BodyData[i].Markers[j]);
 			valid++;
 		}
@@ -402,7 +402,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 		*/
 
 		for (int j = 0; j < frameOfData->BodyData[i].nMarkers; j++) {
-			if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_IDENTIFIED_MARKER_INVALID) { continue; }
+			if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_INVALID_MARKER) { continue; }
 			m = CortexToBoostVector(frameOfData->BodyData[i].Markers[j]);
 		}
 
@@ -425,7 +425,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 
 		}
 
-		if (closestDistance > MAX_BODY_TRACKING_DIST) {
+		if (closestDistance > settings::GetSetting<int>("tracking.max_body_tracking_dist")) {
 			// Create new tracked body
 			bodies.push_back(motion::Body());
 			pBody = &bodies.back();
@@ -474,7 +474,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 
 		}
 		
-		if ( closestDistance > MAX_BODY_TRACKING_DIST ) {
+		if ( closestDistance > settings::GetSetting<int>("tracking.max_body_tracking_dist") ) {
 		
 			// Create new tracked body
 			bodies.push_back( motion::Body() );
@@ -512,12 +512,12 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 
 		// Compute velocity
 		if (bodies[i].positionHistory.size() >= 2) {
-			pPosHist->velocity = norm_2(pPosHist->position - bodies[i].positionHistory[1].position) * CORTEX_ANALYSIS_FPS;
+			pPosHist->velocity = norm_2(pPosHist->position - bodies[i].positionHistory[1].position) * settings::GetSettings<int>("cortex.fps_analysis");
 		}
 
 		// Compute acceleration
 		if (bodies[i].positionHistory.size() >= 3) {
-			pPosHist->acceleration = (pPosHist->velocity - bodies[i].positionHistory[1].velocity) * CORTEX_ANALYSIS_FPS;
+			pPosHist->acceleration = (pPosHist->velocity - bodies[i].positionHistory[1].velocity) * settings::GetSettings<int>("cortex.fps_analysis");
 		}
 	}
 	*/
@@ -525,7 +525,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 	for (int i = 0; i < bodies.size(); i++) {
 		
 		// Delete bodies that haven't been extended with new marker frames for a while
-		if ( frameOfData->iFrame - bodies[i].positionHistory.front().iFrame > MAX_BODY_TRACKING_GAP && 
+		if ( frameOfData->iFrame - bodies[i].positionHistory.front().iFrame > settings::GetSetting<int>("tracking.max_body_tracking_gap") && 
 				bodies[i].takeOffStartFrame == -1) {
 			bodies.erase( bodies.begin() + i );
 			i -= 1;
@@ -539,21 +539,21 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 	for (int i = 0; i < bodies.size(); i++) {
 
 		// Detect take-off based on peak motion velocity
-		if (bodies[i].avgTakeoffSpeed > TAKEOFF_SPEED_THRESHOLD &&
-			bodies[i].avgTakeoffMarkerNum > DRAGONFLY_DETECTION_MARKER_THRESHOLD &&
+		if (bodies[i].avgTakeoffSpeed > settings::GetSetting<float>("tracking.takeoff_speed_threshold") &&
+			bodies[i].avgTakeoffMarkerNum > settings::GetSetting<float>("tracking.dragonfly_marker_minimum") &&
 			bodies[i].takeOffStartFrame == -1) {
 			
 			// Detect the actual takeoff based on (STRIKE)near-zero acceleration and(/STRIKE) near-zero speed
 			int iTakeOff;
 			float stationaryAvgA, stationaryAvgS, stationaryAvgM;
 			
-			for (iTakeOff = 0; iTakeOff < ( MAX_BODY_TRACKING_HISTORY - STATIONARY_DETECTION_WINDOW); iTakeOff++) {
+			for (iTakeOff = 0; iTakeOff < ( settings::GetSetting<int>("tracking.max_body_tracking_history") - settings::GetSetting<int>("tracking.stationary_detection_window")); iTakeOff++) {
 				
-				ComputeMotionProps(bodies[i].positionHistory, iTakeOff, STATIONARY_DETECTION_WINDOW,
+				ComputeMotionProps(bodies[i].positionHistory, iTakeOff, settings::GetSetting<int>("tracking.stationary_detection_window"),
 					&stationaryAvgS, &stationaryAvgA, &stationaryAvgM);
 
-				if (/*stationaryAvgA < STATIONARY_ACCELERATION_THRESHOLD && */
-					stationaryAvgS < STATIONARY_SPEED_THRESHOLD) {
+				if (/*stationaryAvgA < settings::GetSetting("tracking.stationary_acceleration_threshold") && */
+					stationaryAvgS < settings::GetSetting<float>("tracking.stationary_speed_threshold")) {
 					
 					break; // Landing detected!
 				}
@@ -597,18 +597,18 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 			}
 
 			// TODO: Add MarkerNum criteria here?? Probably not?
-			if ((bodies[i].avgStationarySpeed > STATIONARY_SPEED_THRESHOLD /*||
-				bodies[i].avgStationaryAcceleration > STATIONARY_ACCELERATION_THRESHOLD*/)
-				&& (frameOfData->iFrame - bodies[i].takeOffStartFrame < RECORDING_THRESHOLD)) {
+			if ((bodies[i].avgStationarySpeed > settings::GetSetting<float>("tracking.stationary_speed_threshold") /*||
+				bodies[i].avgStationaryAcceleration > settings::GetSetting("tracking.stationary_acceleration_threshold")*/)
+				&& (frameOfData->iFrame - bodies[i].takeOffStartFrame < settings::GetSetting<int>("tracking.landing_timeout"))) {
 				allStationary = false;
 			} else {
-				if (frameOfData->iFrame - bodies[i].takeOffStartFrame > RECORDING_THRESHOLD && 
-					bodies[i].avgStationarySpeed > STATIONARY_SPEED_THRESHOLD) {
-					logging::Log("[MOTION] Forced detection of landing as recording duration maximum (%d frames) was reached.", RECORDING_THRESHOLD);
+				if (frameOfData->iFrame - bodies[i].takeOffStartFrame > settings::GetSetting<int>("tracking.landing_timeout") && 
+					bodies[i].avgStationarySpeed > settings::GetSetting<float>("tracking.stationary_speed_threshold")) {
+					logging::Log("[MOTION] Forced detection of landing as recording duration maximum (%d frames) was reached.", settings::GetSetting<int>("tracking.landing_timeout"));
 				}
 				// Log data
 				if (g_bMotionDebugEnabled) {
-					g_fsMotionDebugInfo << "landing," << frameOfData->iFrame << "," << bodies[i].iBody << "," << frameOfData->iFrame - STATIONARY_DETECTION_WINDOW << "\n";
+					g_fsMotionDebugInfo << "landing," << frameOfData->iFrame << "," << bodies[i].iBody << "," << frameOfData->iFrame - settings::GetSetting<int>("tracking.stationary_detection_window") << "\n";
 				}
 			}
 		}
@@ -616,11 +616,11 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 
 	if (allStationary && takeOffStartFrame!=-1) {
 
-		int takeOffEndFrame = frameOfData->iFrame - STATIONARY_DETECTION_WINDOW;
+		int takeOffEndFrame = frameOfData->iFrame - settings::GetSetting<int>("tracking.stationary_detection_window");
 
 		// Retrieve recording from camera
-		float startTimeAgo = (frameOfData->iFrame - takeOffStartFrame) / float(CORTEX_FPS);
-		float endTimeAgo = (frameOfData->iFrame - takeOffEndFrame) / float(CORTEX_FPS);
+		float startTimeAgo = (frameOfData->iFrame - takeOffStartFrame) / float(settings::GetSetting<int>("cortex.fps"));
+		float endTimeAgo = (frameOfData->iFrame - takeOffEndFrame) / float(settings::GetSetting<int>("cortex.fps"));
 
 		// Always log basic information
 		logging::Log("[D] Takeoff window [-%f,-%f] with respect to now.", startTimeAgo, endTimeAgo);

@@ -1,0 +1,47 @@
+{
+  "settings": {
+    "cortex": {
+      "ip_motion": "0x00000000",
+      "ip_cameras": "0x00000000",
+      "frame_buffer_size": 10000,
+      "fps": 200,
+      "track_unidentified_markers": false,
+      "fps_analysis": 100
+    },
+    "photron": {
+      "enabled": true,
+      "ip": 167837952,
+      "ip_str": "0x0a010100",
+      "camera_count": 1,
+      "fps": 1000,
+      "max_frames_saved": 6000,
+      "set_status_max_retries": 50,
+      "saved_frame_increment": 20,
+      "saved_frames_before": 1000,
+      "saved_frames_after": -1500
+    },
+    "tracking": {
+      "max_body_tracking_history": 1000,
+      "max_body_tracking_dist": 100,
+      "max_body_tracking_gap": 500,
+
+      "takeoff_detection_window": 100,
+      "takeoff_speed_threshold": 30.0,
+
+      "takeoff_detection_velocity_span": 100,
+
+      "stationary_detection_window": 150,
+      "stationary_acceleration_threshold": 20.0,
+      "stationary_speed_threshold": 10.0,
+
+      "known_trigger_delay": 0.7,
+
+      "landing_timeout": 1200,
+      "dragonfly_marker_minimum": 2.5,
+    },
+    "usbcamera": {
+      "fps": 30,
+      "buffer_size": 300
+    }
+  }
+}

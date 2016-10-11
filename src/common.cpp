@@ -78,8 +78,8 @@ void common::Save(float startTimeAgo, float endTimeAgo) {
 	hardware::SendTrigger();
 
 	// Maybe send a system timestamp to thread? That way we can take additional delays into account... (TODO)
-	startTimeAgo += KNOWN_TRIGGER_DELAY;
-	endTimeAgo += KNOWN_TRIGGER_DELAY;
+	startTimeAgo += settings::GetSetting<float>("tracking.known_trigger_delay");
+	endTimeAgo   += settings::GetSetting<float>("tracking.known_trigger_delay");
 
 	logging::Log("Starting saving thread [%f, %f].", startTimeAgo, endTimeAgo);
 	boost::thread t(_Save, startTimeAgo, endTimeAgo);
