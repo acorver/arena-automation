@@ -3,7 +3,7 @@
 #include "settings.h"
 
 json g_Settings;
-std::map<const char*, json> g_SettingsMap;
+std::map<std::string, json> g_SettingsMap;
 
 void settings::Init() {
 
@@ -69,10 +69,10 @@ void _CompareSettings(std::string path, json* oldS, json* newS) {
 void _Index(std::string path, json s) {
 	if (s.is_object()) {
 		for (json::iterator it = s.begin(); it != s.end(); ++it) {
-			_Index(path + "." + it.key(), it.value());
+			_Index(path + (path=="" ? "" : ".") + it.key(), it.value());
 		}
 	} else {
-		g_SettingsMap[path.c_str()] = s;
+		g_SettingsMap[path] = s;
 	}
 }
 
@@ -83,7 +83,7 @@ void settings::SetSettings(json s) {
 
 	// Update key-value pairs for quick indexing
 	g_SettingsMap.clear();
-	_Index("",oldSettings);
+	_Index("",g_Settings["settings"]);
 
 	// Compute difference
 	_CompareSettings("", &oldSettings, &g_Settings);
