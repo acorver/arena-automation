@@ -86,7 +86,7 @@ int motion::Init( boost::thread* pThread ) {
     }
 
     // Initialize debug info for evaluating motion tracking data in real time
-    g_fsMotionDebugInfo = std::ofstream("data/motionlog.txt");
+    g_fsMotionDebugInfo = std::ofstream(common::GetTimeStr("./data/motionlog_%Y-%m-%d %H-%M-%S.txt"));
 
     // Initialize separate thread
     boost::thread t1(motion::WatchFrameBuffer);
