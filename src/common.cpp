@@ -51,6 +51,10 @@ std::string common::GetTimeStr(const char* pattern) {
 	return std::string(ss.str().c_str());
 }
 
+long long common::GetTimestamp() {
+	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
 void _Save(float startTimeAgo, float endTimeAgo) {
 	
 	// TODO: Log on different thread

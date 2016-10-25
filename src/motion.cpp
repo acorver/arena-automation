@@ -602,13 +602,15 @@ void motion::SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF) {
         std::vector<                // UnidentifiedMarkers
         std::vector<float>          // x,y,z
         >,
-        std::vector<int>            // TimeCode: 
+        std::vector<int>,            // TimeCode  (Cortex) 
+		long long,                   // Timestamp (System)
         > d(
             pF->iFrame,
             pF->fDelay,
             _MsgPack_Bodies(pF),
             _MsgPack_UnidentifiedMarkers(pF),
-            _MsgPack_TimeCode(pF)
+            _MsgPack_TimeCode(pF),
+			common::GetTimestamp()
         );
     msgpack::pack(o, d);
 }
