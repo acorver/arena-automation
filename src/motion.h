@@ -37,6 +37,7 @@ namespace motion {
 		
 		int iBody;
 		int takeOffStartFrame;
+		int lastTakeOffStartFrame;
 		vector<float> takeOffPosition;
 		int numUpdates;
 		std::string strName;
@@ -54,7 +55,7 @@ namespace motion {
 		float avgStationaryMarkerNum;
 
 		Body() {
-			takeOffStartFrame = -1;
+			takeOffStartFrame = lastTakeOffStartFrame = -1;
 			takeOffPosition = zero_vector<float>(3);
 			iBody = nextBodyIndex;
 			nextBodyIndex += 1;
@@ -97,6 +98,5 @@ namespace motion {
 	void Save(std::string prefix, float startTimeAgo, float endTimeAgo);
 
 	void SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF);
-	void SaveFrameMsgPackExperimental(std::ofstream& o, sFrameOfData* pF);
 
 }

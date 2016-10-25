@@ -175,9 +175,11 @@ void motion::WatchFrameBuffer() {
 
             iFrame += 1;
 
+			/* UNCOMMENT THIS TO DEBUG THE SPEED WITH WHICH THE QUEUE IS BEING PROCESSED
             if ((iFrame % 1000) == 0) {
                 logging::Log("Processing queue: %d", g_FrameBuffer.read_available());
             }
+			*/
         }
         else {
             boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
@@ -202,19 +204,17 @@ void motion::WatchFrameBufferSave() {
 
             motion::SaveFrameMsgPack(fo, pFrame);
 
-            motion::SaveFrameMsgPackExperimental(fo2, pFrame);
-
-            // SaveFrameMsgPack(Experimental) is now in charge of 
-            // freeing memory.
-            //Cortex_FreeFrame(pFrame);
-            //delete pFrame;
+            Cortex_FreeFrame(pFrame);
+            delete pFrame;
 
             if (iFrame == 1000) { fo.flush(); iFrame = 0; }
             iFrame += 1;
 
-            if ( (iFrame % 1000) == 0) {
+			/* UNCOMMENT THIS TO DEBUG THE SPEED WITH WHICH THE QUEUE IS BEING PROCESSED
+			if ( (iFrame % 1000) == 0) {
                 logging::Log("Saving queue: %d", g_FrameBufferSave.read_available());
             }
+			*/
         }
         else {
             boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
@@ -418,42 +418,45 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
     // Determine if take-off occured over particular time window
     for (int i = 0; i < bodies.size(); i++) {
 
-        // Detect take-off based on peak motion velocity
-        if (bodies[i].avgTakeoffSpeed > _s<float>("tracking.takeoff_speed_threshold") && bodies[i].takeOffStartFrame == -1) {
-            if (bodies[i].avgTakeoffMarkerNum > _s<float>("tracking.dragonfly_marker_minimum")) {
-                // Detect the actual takeoff based on (STRIKE)near-zero acceleration and(/STRIKE) near-zero speed
-                int iTakeOff;
-                float stationaryAvgA, stationaryAvgS, stationaryAvgM;
+		// Takeoffs only allowed for this body a certain frames after the last recording
+		if ( bodies[i].lastTakeOffStartFrame - frameOfData->iFrame >= _s<int>("tracking.min_takeoff_cooldown") ) {
+			// Detect take-off based on peak motion velocity
+			if ( bodies[i].avgTakeoffSpeed > _s<float>("tracking.takeoff_speed_threshold") && bodies[i].takeOffStartFrame == -1 ) {
+				if ( bodies[i].avgTakeoffMarkerNum > _s<float>("tracking.dragonfly_marker_minimum") ) {
+					// Detect the actual takeoff based on (STRIKE)near-zero acceleration and(/STRIKE) near-zero speed
+					int iTakeOff;
+					float stationaryAvgA, stationaryAvgS, stationaryAvgM;
 
-                for (iTakeOff = 0; iTakeOff < (_s<int>("tracking.max_body_tracking_history") - _s<int>("tracking.stationary_detection_window")); iTakeOff++) {
+					for (iTakeOff = 0; iTakeOff < (_s<int>("tracking.max_body_tracking_history") - _s<int>("tracking.stationary_detection_window")); iTakeOff++) {
 
-                    ComputeMotionProps(bodies[i].positionHistory, iTakeOff, _s<int>("tracking.stationary_detection_window"),
-                        &stationaryAvgS, &stationaryAvgA, &stationaryAvgM);
+						ComputeMotionProps(bodies[i].positionHistory, iTakeOff, _s<int>("tracking.stationary_detection_window"),
+							&stationaryAvgS, &stationaryAvgA, &stationaryAvgM);
 
-                    if (/*stationaryAvgA < settings::GetSetting("tracking.stationary_acceleration_threshold") && */
-                        stationaryAvgS < _s<float>("tracking.stationary_speed_threshold")) {
+						if (/*stationaryAvgA < settings::GetSetting("tracking.stationary_acceleration_threshold") && */
+							stationaryAvgS < _s<float>("tracking.stationary_speed_threshold")) {
 
-                        break; // Landing detected!
-                    }
-                }
+							break; // Landing detected!
+						}
+					}
 
-                // Store take-off frame
-                if (iTakeOff < bodies[i].positionHistory.size()) {
-                    bodies[i].takeOffStartFrame = bodies[i].positionHistory[iTakeOff].iFrame;
-                }
-                else {
-                    bodies[i].takeOffStartFrame = bodies[i].positionHistory.back().iFrame;
-                }
+					// Store take-off frame
+					if (iTakeOff < bodies[i].positionHistory.size()) {
+						bodies[i].takeOffStartFrame = bodies[i].positionHistory[iTakeOff].iFrame;
+					}
+					else {
+						bodies[i].takeOffStartFrame = bodies[i].positionHistory.back().iFrame;
+					}
 
-                // Log data
-                logging::Log("[MOTION] Detected takeoff with peak velocity %f, marker num %f", bodies[i].avgTakeoffSpeed, bodies[i].avgTakeoffMarkerNum);
-                if (g_bMotionDebugEnabled) {
-                    g_fsMotionDebugInfo << "takeoff," << frameOfData->iFrame << "," << bodies[i].iBody << "," << bodies[i].takeOffStartFrame << "\n";
-                }
-            } else {
-                logging::Log("[MOTION] Would've detected takeoff, but body doesn't have the right number of markers to be a dragonfly...");
-            }
-        }
+					// Log data
+					logging::Log("[MOTION] Detected takeoff with peak velocity %f, marker num %f", bodies[i].avgTakeoffSpeed, bodies[i].avgTakeoffMarkerNum);
+					if (g_bMotionDebugEnabled) {
+						g_fsMotionDebugInfo << "takeoff," << frameOfData->iFrame << "," << bodies[i].iBody << "," << bodies[i].takeOffStartFrame << "\n";
+					}
+				} else {
+					logging::Log("[MOTION] Would've detected takeoff, but body doesn't have the right number of markers to be a dragonfly...");
+				}
+			}
+		}
 
         // Log info
         if (g_bMotionDebugEnabled) {
@@ -518,6 +521,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 
         // Reset all
         for (int i = 0; i < bodies.size(); i++) {
+			bodies[i].lastTakeOffStartFrame = bodies[i].takeOffStartFrame;
             bodies[i].takeOffStartFrame = -1;
         }
     }
