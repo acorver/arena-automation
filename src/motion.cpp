@@ -376,13 +376,6 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 	// Skip every other frame
 	if ( (frameOfData->iFrame % 2) == 0) { return;  }
 
-	//   o Add unlabeled markers
-	if (_s<bool>("cortex.track_unidentified_markers")) {
-		for (int i = 0; i < frameOfData->nUnidentifiedMarkers; i++) {
-			markers.push_back(CortexToBoostVector(frameOfData->UnidentifiedMarkers[i]));
-		}
-	}
-
 	//   o Add identified markers
 	for (int i = 0; i < frameOfData->nBodies; i++) {
 
@@ -395,19 +388,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 		}
 
 		// Average position
-		//vector<float> m = CortexToBoostVector(frameOfData->BodyData[i].Markers);
-
 		vector<float> m = boost::numeric::ublas::zero_vector<float>(3);
-		/*
-		int valid = 0;
-		for (int j = 0; j < frameOfData->BodyData[i].nMarkers; j++) {
-			if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_INVALID_MARKER) { continue; }
-			m += CortexToBoostVector(frameOfData->BodyData[i].Markers[j]);
-			valid++;
-		}
-		m /= valid;
-		*/
-
 		for (int j = 0; j < frameOfData->BodyData[i].nMarkers; j++) {
 			if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_INVALID_MARKER) { continue; }
 			m = CortexToBoostVector(frameOfData->BodyData[i].Markers[j]);
@@ -452,82 +433,6 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 			g_fsMotionDebugInfo << "marker," << frameOfData->iFrame << "," << pBody->iBody << "," << m[0] << "," << m[1] << "," << m[2] << "\n";
 		}
 	}
-
-	//   o Identify dragonflies as objects (should have 3 (or maybe at least 2?) markers)
-	//     Use a basic clustering logic: 
-	//       - cluster all points that are within a certain radius of each other
-	//   Note: this is not a very good algorithm, as it might cluster multiple objects 
-	//         together leading to missing data frames for some bodies
-
-	// ...
-
-	// Attempt to assign each unidentified marker to an existing object based on proximity, etc.
-	for (int j = 0; j < markers.size(); j++) {
-		
-		int closestBody = -1; int closestDistance = INT_MAX;
-
-		for (int i = 0; i < bodies.size(); i++) {
-			
-			// Skip virtual markers
-			if (bodies[i].IsVirtualMarker()) { continue; }
-
-			int dist = INT_MAX;
-			if (bodies[i].positionHistory.size() >= 1) { dist = norm_2( bodies[i].positionHistory.front().position - markers[j] ); }
-		
-			if (dist < closestDistance) {
-				closestBody = i;
-				closestDistance = dist;
-			}
-
-		}
-		
-		if ( closestDistance > _s<int>("tracking.max_body_tracking_dist") ) {
-		
-			// Create new tracked body
-			bodies.push_back( motion::Body() );
-			pBody = &bodies.back();
-
-		} else {
-
-			pBody = &(bodies[closestBody]);
-		}
-
-		// Append marker to body:
-		if (pBody->positionHistory.size() == 0 || 
-			pBody->positionHistory.front().iFrame !=
-				frameOfData->iFrame) {
-			pBody->positionHistory.push_front(PositionHistory(frameOfData->iFrame));
-		}
-
-		PositionHistory* pPosHist = &(pBody->positionHistory.front());
-			
-		// Re-average position based on new marker
-		pPosHist->position = (pPosHist->position * pPosHist->numMarkers + markers[j]) / 
-			( pPosHist->numMarkers + 1 );
-		pPosHist->numMarkers += 1;
-
-		// Write each marker and the body it was assigned to
-		if (g_bMotionDebugEnabled) {
-			g_fsMotionDebugInfo << "marker" << frameOfData->iFrame << "," << pBody->iBody << "," << markers[j][0] << "," << markers[j][1] << "," << markers[j][2] << "\n";
-		}
-	}
-
-	/*
-	// Compute motion properties
-	for (int i = 0; i < bodies.size(); i++) {
-		PositionHistory* pPosHist = &(bodies[i].positionHistory.front());
-
-		// Compute velocity
-		if (bodies[i].positionHistory.size() >= 2) {
-			pPosHist->velocity = norm_2(pPosHist->position - bodies[i].positionHistory[1].position) * settings::GetSettings<int>("cortex.fps_analysis");
-		}
-
-		// Compute acceleration
-		if (bodies[i].positionHistory.size() >= 3) {
-			pPosHist->acceleration = (pPosHist->velocity - bodies[i].positionHistory[1].velocity) * settings::GetSettings<int>("cortex.fps_analysis");
-		}
-	}
-	*/
 
 	for (int i = 0; i < bodies.size(); i++) {
 		
