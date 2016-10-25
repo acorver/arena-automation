@@ -37,7 +37,7 @@
       "known_trigger_delay": 0.7,
 
       "landing_timeout": 1200,
-      "dragonfly_marker_minimum": 2.5,
+      "dragonfly_marker_minimum": 2.5
     },
     "usbcamera": {
       "fps": 30,
