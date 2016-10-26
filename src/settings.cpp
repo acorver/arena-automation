@@ -33,42 +33,11 @@ void _CallSettingsChangedHandler(std::string path, json* oldS, json* newS) {
 
 void _CompareSettings(std::string path, json* oldS, json* newS) {
 
-	return; // TODO
-
-	// In the future use JSON Patch (now supported by JSON library)
-
-	// Have the types of the settings changed? If so, they can't be the same
-	if ( oldS->type() != newS->type() ) {
-		_CallSettingsChangedHandler( path, oldS, newS );
-		return;
-	}
-
-	// Are these non-iterable values to compare?
-	if ( !newS->is_object() && !newS->is_array() ) {
-		if ( *newS != *oldS ) {
-			_CallSettingsChangedHandler(path, oldS, newS);
-			return;
-		}
-	}
-
-	// check for deleted settings in this object
-	for (json::iterator it = oldS->begin(); it != oldS->end(); ++it) {
-		if (newS->count(it.key()) == 0) {
-			_CallSettingsChangedHandler(path + "." + it.key(), &it.value(), 0);
-		}
-	}
-
-	// Check for new/changed settings in this object
-	for (json::iterator it = newS->begin(); it != newS->end(); ++it) {
-		if (oldS->count(it.key()) == 0) {
-			_CallSettingsChangedHandler(path + "." + it.key(), 0, &it.value());
-		} else {
-			_CompareSettings(path + "." + it.key(), &((*oldS)[it.key()]), &it.value());
-		}
-	}
+	json::diff(*oldS, *newS);
 }
 
 void _Index(std::string path, json s) {
+
 	if (s.is_object()) {
 		for (json::iterator it = s.begin(); it != s.end(); ++it) {
 			_Index(path + (path=="" ? "" : ".") + it.key(), it.value());
@@ -88,12 +57,14 @@ void settings::SetSettings(json s) {
 	_Index("",g_Settings["settings"]);
 
 	// Compute difference
-	//_CompareSettings("", &oldSettings, &g_Settings);
+	_CompareSettings("", &oldSettings, &g_Settings);
 }
 
 json settings::GetSettings() {
 	
-	json c(g_Settings); // TODO: Does this copy the settings? We don't want to pass the settings by reference (SetSettings has to be called!)
+	// TODO: Does this copy the settings? We don't want to pass the settings by 
+	//       reference (SetSettings has to be called!)
+	json c(g_Settings);
 	return c;
 }
 
