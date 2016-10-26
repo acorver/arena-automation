@@ -26,20 +26,19 @@
 #include <fstream>
 #include <climits>
 #include <string>
+#include <regex>
+#include <chrono>
 #include <stdarg.h>
 
-#include <nanoflann/nanoflann.hpp>
+#include "log.h"
 
 #include <jpeg-compressor/jpge.h>
-
-#include "log.h"
 
 #include <serial/SerialClass.h>
 
 #include <cortex/Cortex.h>
 
 #include <photron/PDCLIB.h>
-
 
 #include <opencv3/include/opencv2/opencv.hpp>
 #include <opencv3/include/opencv2/core/core.hpp>
@@ -54,21 +53,8 @@
 #include <json/json.hpp>
 using json = nlohmann::json;
 
-#include <regex>
-
 #include <msgpack.hpp>
 
 #define ELPP_THREAD_SAFE
 #include <easyloggingpp/easylogging++.h>
 
-/*
-extern "C" {
-	#include "lib/ffmpeg/libavcodec/avcodec.h"
-	#include "lib/ffmpeg/libavformat/avformat.h"
-	#include "lib/ffmpeg/libavutil/mathematics.h"
-	#include "lib/ffmpeg/libavutil/imgutils.h"
-	#include "lib/ffmpeg/libavutil/opt.h"
-	#include "lib/ffmpeg/libavutil/samplefmt.h"
-	#include "lib/ffmpeg/libswscale/swscale.h"
-}
-*/

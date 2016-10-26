@@ -71,17 +71,10 @@ void server::Run() {
 		return CreateCrowResponse("OK");
 	});
 
-	CROW_ROUTE(app, "/api/log")
-		([]() {
-		// return the entire cache, in JSON format (TODO)
-		std::string s = "{\"log\": [";
+	CROW_ROUTE(app, "/api/log/<string>/<int>")
+		([](const std::string& query, int start) {
 
-		for (int i = 0; i < logging::GetCacheSize(); i++) {
-			s += "\"" +logging::GetCache(i) + "\"";
-			if (i < logging::GetCacheSize() - 1) { s += ','; }
-		}
-
-		return CreateCrowResponse(s + "]}");
+		return CreateCrowResponse(logging::QueryToJSON(query, start));
 	});
 
 	CROW_ROUTE(app, "/api/settings/get")
@@ -100,6 +93,5 @@ void server::Run() {
 
 	logging::Log("[SERVER] API Server started on port 1000.");
 
-	//app.port(8000).multithreaded().run();
 	app.port(1000).multithreaded().run();
 }

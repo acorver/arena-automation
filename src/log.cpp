@@ -1,87 +1,94 @@
 #include "stdafx.h"
-
 #include "log.h"
 
-#ifndef ELPP_INITIALIZED
-#define ELPP_INITIALIZED
-INITIALIZE_EASYLOGGINGPP
-#endif
+#define SQLITE_ENABLE_FTS5 1
+#define SQLITE_THREADSAFE 1 
+#include <sqlite/sqlite3.h> 
 
-std::vector<std::string> vCache;
-bool vCacheLock;
-//std::ofstream outFile;
+// ========================================
+// Global variables
+// ========================================
 
-/*
-bool logLocked;
-std::string buffer[1000];
-*/
+sqlite3* g_pDB   = 0;
+
+// ========================================
+// Init database and log functionality
+// ========================================
 
 void logging::Init() {
 
-	// Load configuration from file
-	el::Configurations conf("./settings/log.conf");
-	el::Loggers::reconfigureAllLoggers(conf);
+    char *zErrMsg = 0;
+    int  rc;
+    char *sql;
 
-	vCacheLock = false;
+	// Test the threading mode (set at compile-time)
+	int threadingMode = sqlite3_threadsafe();
 
-	//outFile.open("C:/Users/Inigo/Desktop/log.txt");
-	// TODO: Append date/time to log filename
-	// TODO: Print to command line
-	// outFile.open("./data/log.txt");
+	sqlite3_initialize();
 
-	// Initialize separate thread
-	//boost::thread t(logging::WatchLogBuffer);
-}
+    /* Open database */
+    if ( sqlite3_open( common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S.log").c_str(), &g_pDB) ) {
+        fprintf(stderr, "[LOG] Could not init log. Can't open database: %s\n", sqlite3_errmsg(g_pDB));
+        g_pDB = 0;
+        return;
+    } 
 
-/*
-void logging::WatchLogBuffer() {
-	while (true) {
+	/* Create table */
+    sql = "CREATE VIRTUAL TABLE LOG USING fts5 (MSG);";
 
+    rc = sqlite3_exec(g_pDB, sql, 0, 0, &zErrMsg);
+	if (rc != SQLITE_OK) { 
+		fprintf(stderr, "[LOG] Could not init log. SQL error: %s\n", zErrMsg); sqlite3_free(zErrMsg);
+		return; 
 	}
+	
+	/* Create indices */
+	// rc = sqlite3_exec(g_pDB, "CREATE INDEX idxMSG ON LOG(MSG);", 0, 0, &zErrMsg);
+	// if (rc != SQLITE_OK) { fprintf(stderr, "[LOG] Could not init log. SQL error: %s\n", zErrMsg); sqlite3_free(zErrMsg); return; }
 }
-*/
 
 void logging::Log(const char* msg, ...) {
 
-	// TMP:
-	//if (std::string(msg).find("[MOTION]") == std::string::npos &&
-	//	std::string(msg).find("[D]") == std::string::npos) { return; }
-
+	char *zErrMsg = 0;
 	char buffer[4096];
 
-	va_list args;
-	va_start(args, msg);
+    va_list args;
+    va_start(args, msg);
 	vsprintf(buffer, msg, args);
-	va_end(args);
+    va_end(args);
 
-	LOG(INFO) << std::string(buffer).c_str();
-
-	// TODO: Use more feature-rich logger in the future, and better log querying system (e.g. logstash?)
-	if (std::string(msg).find("[D]") == std::string::npos) { 
-		while (vCacheLock) {  
-			boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
+	std::string sql = "INSERT INTO LOG VALUES (\"" + 
+		common::GetTimestampStr() + "," + std::string(buffer) + "\")";
+	
+	for (int tryNum = 0; tryNum < 5; tryNum++) {
+		if (sqlite3_exec(g_pDB, sql.c_str(), 0, 0, &zErrMsg) == SQLITE_OK) { 
+			break; 
 		}
-		vCacheLock = true;
-		vCache.push_back(std::string(buffer));
-		vCacheLock = false;
 	}
 
-	//outFile << buffer; 
-	//outFile << std::endl;
-	//outFile.flush();
+	return;
 }
 
-std::vector<std::string> logging::GetCache() {
-	while (vCacheLock) { boost::this_thread::sleep_for(boost::chrono::milliseconds(1)); }
-	return vCache;
-}
+std::string logging::QueryToJSON(std::string query, int start) {
 
-std::string logging::GetCache(int index) {
-	while (vCacheLock) { boost::this_thread::sleep_for(boost::chrono::milliseconds(1)); }
-	return vCache[index];
-}
+	std::string    json  = "{ \"log\": [ ";
+	sqlite3_stmt * pStmt = 0 ;
+	int            nRow  = 0 ;
 
-int logging::GetCacheSize() {
-	while (vCacheLock) { boost::this_thread::sleep_for(boost::chrono::milliseconds(1)); }
-	return vCache.size();
+	// prepare our query
+	sqlite3_prepare_v2(g_pDB, "select MSG from LOG limit 100;", -1, &pStmt, 0);
+
+	while ( sqlite3_step(pStmt) == SQLITE_ROW ) {
+		
+		if (nRow > 0) { json += ","; }
+
+		json += "\"" + std::string(reinterpret_cast<const char*>(
+			sqlite3_column_text(pStmt, 0))) + "\"";
+
+		nRow++;
+	}
+
+	sqlite3_finalize(pStmt);
+
+	return json + " ] }";
 }

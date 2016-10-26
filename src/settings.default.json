@@ -9,7 +9,7 @@
       "fps_analysis": 100
     },
     "photron": {
-      "enabled": true,
+      "enabled": false,
       "ip": 167837952,
       "ip_str": "0x0a010100",
       "camera_count": 1,
@@ -21,23 +21,27 @@
       "saved_frames_after": -1500
     },
     "tracking": {
+      "body_name": "Yframe",
+
       "max_body_tracking_history": 1000,
       "max_body_tracking_dist": 100,
       "max_body_tracking_gap": 500,
 
-      "takeoff_detection_window": 100,
-      "takeoff_speed_threshold": 30.0,
+      "takeoff_detection_window": 80,
+      "takeoff_speed_threshold": 10.0,
 
       "takeoff_detection_velocity_span": 100,
 
-      "stationary_detection_window": 150,
+      "stationary_detection_window": 80,
       "stationary_acceleration_threshold": 20.0,
-      "stationary_speed_threshold": 10.0,
+      "stationary_speed_threshold": 5.0,
 
       "known_trigger_delay": 0.7,
 
-      "landing_timeout": 1200,
-      "dragonfly_marker_minimum": 2.5
+      "landing_timeout": 400,
+      "dragonfly_marker_minimum": 1.0,
+
+      "min_takeoff_cooldown": 600
     },
     "usbcamera": {
       "fps": 30,

@@ -5,12 +5,6 @@
 namespace logging {
 
 	void Init();
-
 	void Log(const char* msg, ...);
-
-	//void WatchLogBuffer();
-
-	std::vector<std::string> GetCache();
-	std::string GetCache(int index);
-	int GetCacheSize();
+	std::string QueryToJSON(std::string query, int start);
 }

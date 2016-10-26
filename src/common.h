@@ -13,6 +13,7 @@ namespace common {
 	std::string toStr(const char* str, ...);
 	std::string GetTimeStr(const char* pattern);
 	long long GetTimestamp();
+	std::string GetTimestampStr();
 
 	void Save(float startTimeAgo, float endTimeAgo);
 

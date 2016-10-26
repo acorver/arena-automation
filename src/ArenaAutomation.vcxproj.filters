@@ -22,6 +22,9 @@
     <Filter Include="lib\jpeg-compressor">
       <UniqueIdentifier>{9d3a7f83-a0c7-4c77-90d6-59679dbc2d04}</UniqueIdentifier>
     </Filter>
+    <Filter Include="lib\sqlite">
+      <UniqueIdentifier>{707e1748-ab49-457d-88e5-e216ac409ca2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -60,6 +63,12 @@
     <ClCompile Include="..\lib\serial\SerialClass.cpp">
       <Filter>lib\serial</Filter>
     </ClCompile>
+    <ClCompile Include="..\lib\sqlite\sqlite3.c">
+      <Filter>lib\sqlite</Filter>
+    </ClCompile>
+    <ClCompile Include="..\lib\sqlite\shell.c">
+      <Filter>lib\sqlite</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="settings.h">
@@ -94,6 +103,12 @@
     </ClInclude>
     <ClInclude Include="..\lib\serial\SerialClass.h">
       <Filter>lib\serial</Filter>
+    </ClInclude>
+    <ClInclude Include="..\lib\sqlite\sqlite3ext.h">
+      <Filter>lib\sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="..\lib\sqlite\sqlite3.h">
+      <Filter>lib\sqlite</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

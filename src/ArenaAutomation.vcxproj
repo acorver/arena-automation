@@ -185,6 +185,16 @@
     <ClCompile Include="..\lib\serial\SerialClass.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="..\lib\sqlite\shell.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\lib\sqlite\sqlite3.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">TPL_NOLIB;SQLITE_ENABLE_FTS5;SQLITE_THREADSAFE;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">TPL_NOLIB;SQLITE_ENABLE_FTS5;SQLITE_THREADSAFE;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="common.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
     </ClCompile>
@@ -217,6 +227,8 @@
   <ItemGroup>
     <ClInclude Include="..\lib\jpeg-compressor\jpge.h" />
     <ClInclude Include="..\lib\serial\SerialClass.h" />
+    <ClInclude Include="..\lib\sqlite\sqlite3.h" />
+    <ClInclude Include="..\lib\sqlite\sqlite3ext.h" />
     <ClInclude Include="photron.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="hardware.h" />

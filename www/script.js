@@ -33,14 +33,14 @@ arenaApp.config(function($routeProvider) {
 
 arenaApp.controller('mainController', function($scope, $rootScope, $http) {
 
-    $rootScope.host = { ip: "10.101.30.47:1000" /*ip: 'http://10.101.30.47:7894'*/ };
+    $rootScope.host = { ip: "http://10.101.30.47:1000" /*ip: 'http://10.101.30.47:7894'*/ };
     $scope.log = [];
 
     /* Start periodic check for new logging info */
     setInterval(function() {
         $http({
             method: 'GET',
-            url: $rootScope.host.ip + '/api/log'
+            url: $rootScope.host.ip + '/api/log/*/0'
         }).then(function successCallback(response) {
 
             $scope.log = response.data.log;

@@ -86,7 +86,7 @@ int motion::Init( boost::thread* pThread ) {
     }
 
     // Initialize debug info for evaluating motion tracking data in real time
-    g_fsMotionDebugInfo = std::ofstream(common::GetTimeStr("./data/motionlog_%Y-%m-%d %H-%M-%S.txt"));
+    g_fsMotionDebugInfo = std::ofstream(common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S.motionlog"));
 
     // Initialize separate thread
     boost::thread t1(motion::WatchFrameBuffer);
@@ -603,7 +603,7 @@ void motion::SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF) {
         std::vector<float>          // x,y,z
         >,
         std::vector<int>,            // TimeCode  (Cortex) 
-		long long,                   // Timestamp (System)
+		long long                    // Timestamp (System)
         > d(
             pF->iFrame,
             pF->fDelay,
