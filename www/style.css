@@ -32,10 +32,11 @@ html, body {
     
     position: absolute;
     left: 200px;
-    width: 700px;
+    width: 400px;
     top: 60px;
     bottom: 0;
     padding: 30px;
+    word-wrap: break-word;
 }
 
 #container-settings {
@@ -70,7 +71,6 @@ html, body {
 }
 
 .log-msg {
-    width: 500px;
     margin: 2px;
     padding: 2px;
     color: #e8e8e8;

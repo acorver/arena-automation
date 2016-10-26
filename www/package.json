@@ -1,0 +1,15 @@
+{
+  "name": "arena-launcher",
+  "version": "1.0.0",
+  "description": "Wrapper for launching various other arena automation software and hardware components.",
+  "main": "launcher.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Abel Corver",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.14.0",
+    "serialport": "^4.0.3"
+  }
+}
