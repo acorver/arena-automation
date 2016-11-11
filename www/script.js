@@ -10,8 +10,14 @@ arenaApp.config(function($routeProvider) {
 
         // route for the home page
         .when('/', {
-            templateUrl : 'dashboard.html',
+            templateUrl : 'log.html',
             controller  : 'mainController'
+        })
+
+        // route for the contact page
+        .when('/settings', {
+            templateUrl : 'settings.html',
+            controller  : 'settingsController'
         })
 
         // route for the about page
@@ -50,18 +56,27 @@ arenaApp.controller('mainController', function($scope, $rootScope, $http) {
             $scope.msg = "Lost communication with server.";
         });
     }, 1000);
+});
 
-    $http.get('settings.schema.json')
-        .then(function(res){
-            var schema = res.data.data;
-            $http.get( $rootScope.host.ip + '/api/settings/get')
-                .then(function(res) {
-                    $rootScope.settings = res.data;
-                    var options = { schema: schema, data: $rootScope.settings };
-                    $scope.treema = $("#treema").treema(options); 
-                    $scope.treema.build();
-            });     
-        });   
+/* ======================================================================================
+   Settings Controller
+====================================================================================== */
+
+arenaApp.controller('settingsController', function($scope, $rootScope, $http) {
+
+   if ($("#treema").treema != null) {
+        $http.get('settings.schema.json')
+            .then(function(res){
+                var schema = res.data.data;
+                $http.get( $rootScope.host.ip + '/api/settings/get')
+                    .then(function(res) {
+                        $rootScope.settings = res.data;
+                        var options = { schema: schema, data: $rootScope.settings };
+                        $scope.treema = $("#treema").treema(options); 
+                        $scope.treema.build();
+                });     
+            });   
+    }
 
     // Sync settings occasionally
     setInterval(function() {

@@ -1,0 +1,15 @@
+
+<div id="container-log">
+    <div>
+        <ul>
+            <li class="log-msg">
+                {{msg}}
+            </li>
+        </ul>
+    </div>
+    <ul>
+        <li ng-repeat="msg in log track by $index" class="log-msg">
+            {{msg}}
+        </li>
+    </ul>
+</div>

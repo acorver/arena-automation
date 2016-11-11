@@ -1,6 +1,7 @@
 ﻿<!DOCTYPE html>
 
 <html xmlns="http://www.w3.org/1999/xhtml" ng-app="arenaApp">
+
 <head>
     <meta charset="utf-8" />
     <title>Dragonfly Arena Interface</title>
@@ -15,21 +16,10 @@
     <link rel="stylesheet" href="style.css">
 
 </head>
+
 <body ng-controller="mainController">
 
-    <!-- Menu bar -->
-    <nav class="navbar navbar-default" role="navigation" bs-navbar>
-    <div class="navbar-header">
-        <a class="navbar-brand" href="#">Dragonfly Arena Interface v.0.0.1</a>
-    </div>
-    <ul class="nav navbar-nav">
-        <li class="active" data-match-route="/$"><a href="#/">Dashboard</a></li>
-        <li data-match-route="/cameras"><a href="#/cameras">High-speed Cameras</a></li>
-        <li data-match-route="/motion"><a href="#/motion">Motion Detection</a></li>
-        <input type="text" ng-model="host.ip" id="input-host-ip" class="form-control"
-        data-trigger="focus" bs-tooltip="Enter the Arena host computer's IP address here.'">
-    </ul>
-    </nav>
+    <ng-include src="'menu.html'"></ng-include>
 
     <!-- Main View -->
     <div id="main">
@@ -51,6 +41,6 @@
     <script src="lib/threejs/OrbitControls.js" type="text/javascript"></script>
     <script src="script.js" type="text/javascript"></script>
 
-
 </body>
+
 </html>
