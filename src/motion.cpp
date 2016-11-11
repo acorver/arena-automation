@@ -27,6 +27,7 @@ std::deque<sFrameOfData*>    recentlySavedFrames;
 bool                         g_bMotionTriggerEnabled = true;
 std::ofstream                g_fsMotionDebugInfo;
 bool                         g_bMotionDebugEnabled = true;
+int                          g_nLastTakeoffFrame = -1;
 
 // ----------------------------------------------
 // Name:  init()
@@ -419,7 +420,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
     for (int i = 0; i < bodies.size(); i++) {
 
 		// Takeoffs only allowed for this body a certain frames after the last recording
-		if ( bodies[i].lastTakeOffStartFrame - frameOfData->iFrame >= _s<int>("tracking.min_takeoff_cooldown") ) {
+		if ( frameOfData->iFrame - g_nLastTakeoffFrame >= _s<int>("tracking.min_takeoff_cooldown") ) {
 			// Detect take-off based on peak motion velocity
 			if ( bodies[i].avgTakeoffSpeed > _s<float>("tracking.takeoff_speed_threshold") && bodies[i].takeOffStartFrame == -1 ) {
 				if ( bodies[i].avgTakeoffMarkerNum > _s<float>("tracking.dragonfly_marker_minimum") ) {
@@ -508,7 +509,14 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
         // Always log basic information
         logging::Log("[D] Takeoff window [-%f,-%f] with respect to now (Cortex frame %d).", startTimeAgo, endTimeAgo, frameOfData->iFrame);
 
-        // Save data from this frame
+		// Reset all
+		for (int i = 0; i < bodies.size(); i++) {
+			bodies[i].lastTakeOffStartFrame = frameOfData->iFrame; // bodies[i].takeOffStartFrame;
+			g_nLastTakeoffFrame = std::max(g_nLastTakeoffFrame, bodies[i].lastTakeOffStartFrame);
+			bodies[i].takeOffStartFrame = -1;
+		}
+
+		// Save data from this frame
         if (g_bMotionTriggerEnabled) {
             common::Save(startTimeAgo, endTimeAgo);
         } else {
@@ -517,12 +525,6 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 
         if (g_bMotionDebugEnabled) {
             g_fsMotionDebugInfo << "alllanded," << frameOfData->iFrame << "\n";
-        }
-
-        // Reset all
-        for (int i = 0; i < bodies.size(); i++) {
-			bodies[i].lastTakeOffStartFrame = bodies[i].takeOffStartFrame;
-            bodies[i].takeOffStartFrame = -1;
         }
     }
 }

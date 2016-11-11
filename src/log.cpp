@@ -34,17 +34,18 @@ void logging::Init() {
     } 
 
 	/* Create table */
-    sql = "CREATE VIRTUAL TABLE LOG USING fts5 (MSG);";
+    sql = "CREATE VIRTUAL TABLE LOG USING fts5 (MSG); CREATE TABLE PLOG (id INTEGER PRIMARY KEY AUTOINCREMENT, DATETIME timestamp ,msg TEXT)";
 
     rc = sqlite3_exec(g_pDB, sql, 0, 0, &zErrMsg);
-	if (rc != SQLITE_OK) { 
-		fprintf(stderr, "[LOG] Could not init log. SQL error: %s\n", zErrMsg); sqlite3_free(zErrMsg);
-		return; 
-	}
+	if (rc != SQLITE_OK) {  fprintf(stderr, "[LOG] Could not init log. SQL error: %s\n", zErrMsg); sqlite3_free(zErrMsg); return; }
 	
 	/* Create indices */
 	// rc = sqlite3_exec(g_pDB, "CREATE INDEX idxMSG ON LOG(MSG);", 0, 0, &zErrMsg);
 	// if (rc != SQLITE_OK) { fprintf(stderr, "[LOG] Could not init log. SQL error: %s\n", zErrMsg); sqlite3_free(zErrMsg); return; }
+
+
+	/// TODO: WRITE SETTINGS TO LOG!
+
 }
 
 void logging::Log(const char* msg, ...) {
@@ -66,6 +67,15 @@ void logging::Log(const char* msg, ...) {
 		}
 	}
 
+	sql = "INSERT INTO PLOG (timestamp, msg) VALUES (" +
+		common::GetTimestampStr() + ",\"" + std::string(buffer) + "\")";
+
+	for (int tryNum = 0; tryNum < 5; tryNum++) {
+		if (sqlite3_exec(g_pDB, sql.c_str(), 0, 0, &zErrMsg) == SQLITE_OK) {
+			break;
+		}
+	}
+
 	return;
 }
 
@@ -76,7 +86,7 @@ std::string logging::QueryToJSON(std::string query, int start) {
 	int            nRow  = 0 ;
 
 	// prepare our query
-	sqlite3_prepare_v2(g_pDB, "select MSG from LOG limit 100;", -1, &pStmt, 0);
+	sqlite3_prepare_v2(g_pDB, "select MSG from LOG limit 1000000;", -1, &pStmt, 0);
 
 	while ( sqlite3_step(pStmt) == SQLITE_ROW ) {
 		
