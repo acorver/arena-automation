@@ -1,5 +1,11 @@
 #include "stdafx.h"
 
+// TODO: 
+//    o Use acceleration threshold: one marker, center derivative
+//    o COmpute Z range based on history, then do threshold e.g. 1 mm above that
+//    o Make it easier to plot internal velocity/takeoff stats
+//    o 
+
 // ============================================================================
 // Name: Motion.cpp
 // Desc: This file handles connection and processing of high-speed motion  
@@ -12,7 +18,7 @@
 #include "hardware.h"
 
 // Global variables
-boost::lockfree::spsc_queue<sFrameOfData*, 
+boost::lockfree::spsc_queue<motion::CortexFrame*,
 	boost::lockfree::capacity<1000000> > 
 	                         g_FrameBuffer, 
 	                         g_FrameBufferSave;
@@ -128,16 +134,20 @@ void motion::BufferFrame(sFrameOfData* frameOfData) {
     if (g_nLastFrameIndex == frameOfData->iFrame) { return; }
 
     // Save copy of frame data
-    sFrameOfData* pFrame = new sFrameOfData();
-    memset(pFrame, 0, sizeof(sFrameOfData));
-    Cortex_CopyFrame(frameOfData, pFrame);
-    g_FrameBuffer.push(pFrame);
+	CortexFrame* pCortexFrame = new CortexFrame();
+	pCortexFrame->nTimestampReceived = common::GetTimestamp(); // still error.... is this a timestamp issue?
+	pCortexFrame->pFrame = new sFrameOfData();
+    memset(pCortexFrame->pFrame, 0, sizeof(sFrameOfData));
+    Cortex_CopyFrame(frameOfData, pCortexFrame->pFrame);
+    g_FrameBuffer.push(pCortexFrame);
     
     // Save copy for the saving thread (TODO: Perhaps don't copy the frame twice?)
-    pFrame = new sFrameOfData();
-    memset(pFrame, 0, sizeof(sFrameOfData));
-    Cortex_CopyFrame(frameOfData, pFrame);
-    g_FrameBufferSave.push(pFrame);
+	CortexFrame* pCortexFrame2 = new CortexFrame();
+	pCortexFrame2->nTimestampReceived = common::GetTimestamp();
+	pCortexFrame2->pFrame = new sFrameOfData();
+    memset(pCortexFrame2->pFrame, 0, sizeof(sFrameOfData));
+    Cortex_CopyFrame(frameOfData, pCortexFrame2->pFrame);
+    g_FrameBufferSave.push(pCortexFrame2);
 
     // Record the most recent frame index
     g_nLastFrameIndex = frameOfData->iFrame;
@@ -165,22 +175,17 @@ void motion::WatchFrameBuffer() {
 
     int iFrame = 0;
 
-    sFrameOfData* pFrame = 0;
+	CortexFrame *pCortexFrame;
 
     while (true) {
-        if (g_FrameBuffer.pop(pFrame)) {
-            motion::ProcessFrame(pFrame);
+        if (g_FrameBuffer.pop(pCortexFrame)) {
+            motion::ProcessFrame(pCortexFrame);
 
-            Cortex_FreeFrame(pFrame);
-            delete pFrame;
+            Cortex_FreeFrame(pCortexFrame->pFrame);
+            delete pCortexFrame->pFrame;
+			delete pCortexFrame;
 
             iFrame += 1;
-
-			/* UNCOMMENT THIS TO DEBUG THE SPEED WITH WHICH THE QUEUE IS BEING PROCESSED
-            if ((iFrame % 1000) == 0) {
-                logging::Log("Processing queue: %d", g_FrameBuffer.read_available());
-            }
-			*/
         }
         else {
             boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
@@ -192,30 +197,25 @@ void motion::WatchFrameBufferSave() {
 
     int iFrame = 0;
 
-    std::string file = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S_Cortex.msgpack");
+    std::string file = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S.msgpack");
     std::ofstream fo(file.c_str(), std::ofstream::binary);
 
     std::string file2 = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S_Cortex_experimental.msgpack");
     std::ofstream fo2(file.c_str(), std::ofstream::binary);
 
-    sFrameOfData* pFrame = 0;
+	CortexFrame *pCortexFrame;
 
     while (true) {
-        if (g_FrameBufferSave.pop(pFrame)) {
+        if (g_FrameBufferSave.pop(pCortexFrame)) {
 
-            motion::SaveFrameMsgPack(fo, pFrame);
+            motion::SaveFrameMsgPack(fo, pCortexFrame);
 
-            Cortex_FreeFrame(pFrame);
-            delete pFrame;
+            Cortex_FreeFrame(pCortexFrame->pFrame);
+            delete pCortexFrame->pFrame;
+			delete pCortexFrame;
 
             if (iFrame == 1000) { fo.flush(); iFrame = 0; }
             iFrame += 1;
-
-			/* UNCOMMENT THIS TO DEBUG THE SPEED WITH WHICH THE QUEUE IS BEING PROCESSED
-			if ( (iFrame % 1000) == 0) {
-                logging::Log("Saving queue: %d", g_FrameBufferSave.read_available());
-            }
-			*/
         }
         else {
             boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
@@ -260,7 +260,6 @@ void ComputeMotionProps(std::deque<motion::PositionHistory> &markers, int offset
 
     *avgMarkerNum     = 0.0f;
     *avgSpeed         = 0.0f;
-    //*avgAcceleration = 0.0f;
 
     // Only start computing when complete window data has been gathered to prevent statistical decisions 
     // based on little data // TODO: Have some kind of more meaningful function behavior...
@@ -270,7 +269,6 @@ void ComputeMotionProps(std::deque<motion::PositionHistory> &markers, int offset
         
         *avgMarkerNum     = *avgMarkerNum    + markers[offset + j].numMarkers    / float(window);
         *avgSpeed         = *avgSpeed        + markers[offset + j].velocity        / float(window);
-        //*avgAcceleration = *avgAcceleration + markers[offset + j].acceleration    / float(window); // TODO: Why did this use to be window-1 ??
     }
 }
 
@@ -336,7 +334,9 @@ void motion::Body::Update() {
     }
 }
 
-void motion::ProcessFrame(sFrameOfData* frameOfData) {
+void motion::ProcessFrame(CortexFrame *pCortexFrame) {
+
+	sFrameOfData* frameOfData = pCortexFrame->pFrame;
 
     // Variables
     std::vector<vector<float>> markers;
@@ -356,12 +356,14 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
             continue;
         }
 
-        // Average position
-        vector<float> m = boost::numeric::ublas::zero_vector<float>(3);
-        for (int j = 0; j < frameOfData->BodyData[i].nMarkers; j++) {
-            if (frameOfData->BodyData[i].Markers[j][0] == CORTEX_INVALID_MARKER) { continue; }
-            m = CortexToBoostVector(frameOfData->BodyData[i].Markers[j]);
-        }
+        // First try center marker
+		vector<float> m = CortexToBoostVector(frameOfData->BodyData[i].Markers[1]);
+		if (m[0] == CORTEX_INVALID_MARKER) { 
+			m = CortexToBoostVector(frameOfData->BodyData[i].Markers[2]);
+		}
+		if (m[0] == CORTEX_INVALID_MARKER) {
+			continue;
+		}
 
         // Find the closest body
         int closestBody = -1; int closestDistance = INT_MAX;
@@ -424,7 +426,7 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
 			// Detect take-off based on peak motion velocity
 			if ( bodies[i].avgTakeoffSpeed > _s<float>("tracking.takeoff_speed_threshold") && bodies[i].takeOffStartFrame == -1 ) {
 				if ( bodies[i].avgTakeoffMarkerNum > _s<float>("tracking.dragonfly_marker_minimum") ) {
-					// Detect the actual takeoff based on (STRIKE)near-zero acceleration and(/STRIKE) near-zero speed
+					// Detect the actual takeoff based on near-zero speed
 					int iTakeOff;
 					float stationaryAvgA, stationaryAvgS, stationaryAvgM;
 
@@ -488,7 +490,9 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
             } else {
                 if (frameOfData->iFrame - bodies[i].takeOffStartFrame > _s<int>("tracking.landing_timeout") && 
                     bodies[i].avgStationarySpeed > _s<float>("tracking.stationary_speed_threshold")) {
-                    logging::Log("[MOTION] Forced detection of landing as recording duration maximum (%d frames) was reached.", _s<int>("tracking.landing_timeout"));
+                    
+					logging::Log("[MOTION] Forced detection of landing as recording duration maximum (%d frames) was reached.", _s<int>("tracking.landing_timeout"));
+					allStationary = true;
                 }
                 // Log data
                 if (g_bMotionDebugEnabled) {
@@ -527,6 +531,11 @@ void motion::ProcessFrame(sFrameOfData* frameOfData) {
             g_fsMotionDebugInfo << "alllanded," << frameOfData->iFrame << "\n";
         }
     }
+
+	// Log info on frame processing time
+	if (g_bMotionDebugEnabled) {
+		g_fsMotionDebugInfo << "delay_frame," << frameOfData->iFrame << "," << pCortexFrame->nTimestampReceived << "," << common::GetTimestamp() << "\n";
+	}
 }
 
 // ----------------------------------------------
@@ -538,11 +547,9 @@ std::vector<std::vector<float>> _MsgPack_UnidentifiedMarkers(sFrameOfData* pF) {
     
     // Skip unidentified markers if they're too numerous (i.e. noisy)
     // Prevents overflowing harddrive accidentally
-    if (pF->nUnidentifiedMarkers < 40) {
-        for (int i = 0; i < pF->nUnidentifiedMarkers; i++) {
-            markers.push_back(std::vector<float>(
-                pF->UnidentifiedMarkers[i], pF->UnidentifiedMarkers[i] + 3));
-        }
+    for (int i = 0; i < std::min(_s<int>("tracking.unid_marker_save_maximum"), pF->nUnidentifiedMarkers); i++) {
+        markers.push_back(std::vector<float>(
+            pF->UnidentifiedMarkers[i], pF->UnidentifiedMarkers[i] + 3));
     }
 
     return markers;
@@ -589,7 +596,9 @@ std::vector<int> _MsgPack_TimeCode(sFrameOfData* pF) {
     return t;
 }
 
-void motion::SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF) {
+void motion::SaveFrameMsgPack(std::ofstream& o, CortexFrame *pCortexFrame) {
+
+	sFrameOfData* pF = pCortexFrame->pFrame;
 
     msgpack::type::tuple<
         int,                        // iFrame
@@ -607,12 +616,12 @@ void motion::SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF) {
         std::vector<int>,            // TimeCode  (Cortex) 
 		long long                    // Timestamp (System)
         > d(
-            pF->iFrame,
+			pF->iFrame,
             pF->fDelay,
             _MsgPack_Bodies(pF),
             _MsgPack_UnidentifiedMarkers(pF),
             _MsgPack_TimeCode(pF),
-			common::GetTimestamp()
+			pCortexFrame->nTimestampReceived
         );
     msgpack::pack(o, d);
 }
