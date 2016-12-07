@@ -1,0 +1,14 @@
+﻿* {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    margin: 2cm;
+}
+
+img {
+    display: block;
+    max-width: 80%;
+    float: none;
+}

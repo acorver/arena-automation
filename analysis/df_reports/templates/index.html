@@ -1,0 +1,81 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <link rel="stylesheet" type="text/css" href="bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+<body>
+    
+    <h1>Dragonfly Daily Activity Report</h1>
+    <h2><b>Date:</b> {{report_date}}</h2>
+    
+    <p>
+        This report summarizes the daily activity of dragonflies in 
+        the arena.
+    </p>
+
+    <h3>Trajectory Overview</h3>
+    
+    <video width="800" height="500" controls autoplay loop>
+        <source src="{{srcTrajectories3D}}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <h3>Summary of Activity</h3>
+
+    <table>
+        <tr>
+            <td>Recording span:</td>
+            <td>
+                Cortex frames were recorded between the following times:
+                {{timespan}}. This is likely also the time the animals were introduced,
+                unless noted otherwise.
+            </td>
+        </tr>
+        <tr>
+            <td>Number of flights:</td>
+            <td>
+                TODO
+            </td>
+        </tr>
+        <tr>
+            <td>Number of (upward) takeoffs:</td>
+            <td>
+                TODO
+            </td>
+        </tr>
+    </table>
+
+    <h3>Perching Locations</h3>
+    <img src="{{srcPerchingCount2D}}" />
+    <img src="{{srcPerchingTotal2D}}" />
+
+    <h3>Trajectory statistics</h3>
+    <img src="{{srcTrajStatistics}}" />
+
+    <h3>Variability throughout the day</h3>
+    <p>
+        The takeoffs varied as follows throughout the day:
+    </p>
+    <img src="{{srcDailyActivity}}" />
+    
+    <h3>FlySim Trials</h3>
+    
+    <p>
+        FlySim trials were randomly given with the following statistics:
+    </p>
+
+    <img src="{{srcTrialStatistics}}" />
+
+    <h3>Triggering debug info</h3>
+    <p>
+        Frames were processed with ____ motion processing delay on average. The time from received frame to 
+        USB trigger was ____.
+    </p>
+
+    <script type="text/javascript" src="bootstrap.min.js"></script>
+</body>
+</html>

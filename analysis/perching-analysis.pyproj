@@ -1,0 +1,82 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{76b3e4b1-9cd1-4076-a48b-7f13f62bc0b8}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>df_reports\generate_reports.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId />
+    <InterpreterVersion />
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+    <PtvsTargetsFile>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets</PtvsTargetsFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="auto_updater.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="df_reports\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\create_highspeed_links.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\util.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="update_all.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_flysim.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_headmovements.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_log_info.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_perch_locations.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_perching_locations.py" />
+    <Compile Include="postprocessing\extract_perching_orientations.py" />
+    <Compile Include="postprocessing\extract_yframe_xyz.py" />
+    <Compile Include="df_reports\generate_reports.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\identify-dfs.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\plot_takeoffs.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="df_reports\" />
+    <Folder Include="df_reports\templates\" />
+    <Folder Include="df_reports\templates\static\" />
+    <Folder Include="postprocessing\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="df_reports\templates\static\bootstrap-flex.min.css" />
+    <Content Include="df_reports\templates\static\bootstrap-grid.min.css" />
+    <Content Include="df_reports\templates\static\bootstrap-reboot.min.css" />
+    <Content Include="df_reports\templates\static\bootstrap.min.css" />
+    <Content Include="df_reports\templates\static\bootstrap.min.js" />
+    <Content Include="df_reports\templates\index.html" />
+    <Content Include="df_reports\templates\static\style.css" />
+  </ItemGroup>
+  <Import Project="$(PtvsTargetsFile)" Condition="Exists($(PtvsTargetsFile))" />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="!Exists($(PtvsTargetsFile))" />
+</Project>
