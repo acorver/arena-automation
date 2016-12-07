@@ -34,7 +34,7 @@ void logging::Init() {
     } 
 
 	/* Create table */
-    sql = "CREATE VIRTUAL TABLE LOG USING fts5 (MSG); CREATE TABLE PLOG (id INTEGER PRIMARY KEY AUTOINCREMENT, DATETIME timestamp ,msg TEXT)";
+    sql = "CREATE VIRTUAL TABLE LOG USING fts5 (MSG); CREATE TABLE PLOG (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME,msg TEXT)";
 
     rc = sqlite3_exec(g_pDB, sql, 0, 0, &zErrMsg);
 	if (rc != SQLITE_OK) {  fprintf(stderr, "[LOG] Could not init log. SQL error: %s\n", zErrMsg); sqlite3_free(zErrMsg); return; }

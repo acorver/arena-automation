@@ -9,7 +9,7 @@ html, body {
 }
 
 #main {
-    position: fixed;
+    position: absolute;
     left: 300px;
     top: 0;
     padding: 20px;  

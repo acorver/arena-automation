@@ -4,8 +4,12 @@
 
 namespace hardware {
 
-	void Init();
+	void Init( boost::thread* pThread );
 
 	void SendTrigger();
+
+	const char* SendFlySimCommand(const char* cmd);
+
+	void UpdateFlySim();
 
 }

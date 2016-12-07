@@ -71,6 +71,14 @@ void server::Run() {
 		return CreateCrowResponse("OK");
 	});
 
+	CROW_ROUTE(app, "/api/flysim/<string>")
+		([](const std::string& str) {
+
+		hardware::SendFlySimCommand(str.c_str());
+
+		return CreateCrowResponse("OK");
+	});
+
 	CROW_ROUTE(app, "/api/log/<string>/<int>")
 		([](const std::string& query, int start) {
 

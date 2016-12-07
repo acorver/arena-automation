@@ -33,6 +33,15 @@ namespace motion {
 
 	} PositionHistory;
 
+	typedef struct CortexFrame {
+		sFrameOfData* pFrame;
+		long long nTimestampReceived;
+
+		CortexFrame() {
+			nTimestampReceived = 0;
+		}
+	};
+
 	typedef struct Body { 
 		
 		int iBody;
@@ -89,7 +98,7 @@ namespace motion {
 	void WatchFrameBuffer();
 	void WatchFrameBufferSave();
 
-	void ProcessFrame(sFrameOfData* FrameOfData);
+	void ProcessFrame(CortexFrame *pCortexFrame);
 
 	void GetMarkers();
 
@@ -97,6 +106,6 @@ namespace motion {
 
 	void Save(std::string prefix, float startTimeAgo, float endTimeAgo);
 
-	void SaveFrameMsgPack(std::ofstream& o, sFrameOfData* pF);
+	void SaveFrameMsgPack(std::ofstream& o, CortexFrame *pCortexFrame);
 
 }

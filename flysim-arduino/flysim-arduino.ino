@@ -70,8 +70,8 @@ unsigned long StartTime   = CurrentTime;  // mark the t0 point in microsecond
 
 Encoder Enc2(2, 3); // FlySim desktop model objects
 
-#define MAX_X_ERROR         20                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
-#define MAX_Z_ERROR         20                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
+#define MAX_X_ERROR         32                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
+#define MAX_Z_ERROR         32                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
 
 long WHEEL_SIZE_X  =  40;
 float CONVERSION_X  =  WHEEL_SIZE_X * PI / 256;
@@ -199,6 +199,8 @@ void triggerCortex(bool trigger) {
 
     if (g_bCortexRecording != trigger) {
 
+        g_bCortexRecording = trigger;
+
         digitalWrite(PIN_MACTRIGGER, LOW);
         delay(100);
         digitalWrite(PIN_MACTRIGGER, HIGH);  
@@ -211,9 +213,12 @@ void triggerCortex(bool trigger) {
 
 void setup() {
 
-    Serial.begin(115200); // This is COM6 that talks to the PC
+    Serial.begin(9600); // This is COM6 that talks to the PC
+
+    // Initialize random seed with noise from analog pin
+    randomSeed(analogRead(0));
     
-    //initialize the emergency stop switch
+    // Initialize the emergency stop switch
     pinMode(PIN_STOP, INPUT); 
     
     // This aux recieves DF presence signal
@@ -437,9 +442,6 @@ void updateTune(long elapsedTime) {
     Serial.println("Tuning finished");
     g_CurrentUpdateFunctionStr = "";
     g_CurrentUpdateFunction = NULL;
-  } else {
-    Serial.print("Kangaroo busy: ");
-    Serial.println(String(kangarooX->getP().flags()));
   }
 }
 
@@ -633,8 +635,8 @@ void updateTrials(long elapsedTime) {
     // Wait to start trial (so as not to habituate the dF)
     if (g_TimeUntilTrial < 0) {
         
-        // Did we reach our goal for the current segment?
-        if ( abs(g_CurPosX-targetPositionX) > MAX_X_ERROR ){
+        // Did we reach our goal for the current segment? (Build in fail-safe, in case tuning is off)
+        if ( abs(g_CurPosX-targetPositionX) > MAX_X_ERROR && g_TimeUntilTrial > -8 * 1000000 ){
     
             // If not, let Kangaroo controllers update system state
             kangarooX->s( (int) targetVelocityX / CONVERSION_X ).wait();
@@ -655,11 +657,11 @@ void updateTrials(long elapsedTime) {
             }
     
             long dir   = (dst-g_CurPosX) / abs(dst-g_CurPosX);
-            long speed = random(600, 1500);
-            long tWait = random(25, 60) * 1000000;
-            long height= random(6, 12) * 50;
+            long speed = random(900, 1600);
+            long tWait = random(25, 55) * 1000000;
+            long height= random(12, 22) * 25;
             
-            Serial.println("Started new trial ");
+            Serial.println("Started new trial: speed=" + String(speed) + ", height=" + String(height) + ", wait=" + String(tWait/1000000) );
             
             // Set appropriate X speed
             targetVelocityX = dir * speed;
@@ -722,8 +724,6 @@ void cmdNeutral(char** pArgs, uint8_t numArgs) {
 // ================================================================
 // Route serial commands to the right function
 // ================================================================
-
-typedef void (*function)();
 
 void processSerialCommand(char** pArgs, uint8_t numArgs) {
 

@@ -18,6 +18,7 @@ int main() {
 	boost::thread t2;
 	boost::thread t3;
 	boost::thread t4;
+	boost::thread t5;
 
 	int nResult;
 
@@ -35,7 +36,7 @@ int main() {
 	t1 = server::Init();
 
 	// Attempt to initialize hardware interfaces
-	hardware::Init();
+	hardware::Init( &t5 );
 
 	// Attempt to initialize USB cameras
 	//nResult = usbcamera::Init(&t4);
@@ -48,8 +49,11 @@ int main() {
 		nResult = photron::Init(&t3);
 	}
 
+	// TODO: Auto-spawn browser window...
+
 	// Join on all threads (prevent program from exiting)
 	t1.join();
 	t2.join();
 	t3.join();
+	t5.join();
 }
