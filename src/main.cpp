@@ -25,6 +25,9 @@ int main() {
 	// Initialize settings
 	settings::Init();
 
+	// Initialize the common output prefix
+	common::GetCommonOutputPrefix();
+
 	// Initialize the log
 	logging::Init();
 

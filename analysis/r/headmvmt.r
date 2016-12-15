@@ -8,7 +8,7 @@ library(smoother)
 library(zoo)
 library(animation)
 
-setwd('Z:/people/Abel/perching-analysis/r')
+setwd('Z:/people/Abel/arena-automation/analysis/r')
 
 # ========================================================================================
 # Load data
@@ -18,14 +18,50 @@ hm.all <- fread('../data/2016-11-14 14-09-32_Cortex.headmvmt.csv')
 
 hm <- hm.all
 hm <- hm[!is.na(hm.all$hml_x) & !is.na(hm.all$yfl_x),]
+hm <- hm[hm$valid & hm_e_h < 4,]
 
 # ========================================================================================
 # Plot timeseries
 # ========================================================================================
 
-d <- hm[hm$valid,]
-d <- d[1:1e4]
-plot(d$head_azm)
+# 
+hist(hm$hm_e_h)
+hist(hm$hm_e_h[hm$valid])
+
+# Smooth
+fs <- rollmean(hm$frame, 200)
+
+azm  <- hm$h_azm * (360/(2*3.1415))
+azms <- rollmean(azm, 200)
+
+alt  <- hm$h_alt * (360/(2*3.1415))
+alts <- rollmean(alt, 200)
+
+plot(fs[1:(200*120000)], alts[1:(200*120000)], type='l')
+plot(fs[1:(200*1200)], azms[1:(200*1200)], type='l')
+
+# Find a frame where head moved at least 20 degrees in 100 ms (20 frames)
+isMvmtFrame <- alt[1:(length(alt)-20)] - alt[21:length(alt)]
+frames <- hm$frame[abs(isMvmtFrame)>30]
+
+#
+#d <- hm[1e4:(1e4+200*60)]
+
+fMvmtGUI <- function(iframe) {
+  d <- hm[hm$frame >= frames[iframe] & hm$frame < (frames[iframe]+200),]
+  plot(d$frame,d$h_alt * (360/(2*3.1415)), type='l')
+  plot3d(d$hml_x,d$hml_y,d$hml_z,col='red')
+  points3d(d$hmr_x,d$hmr_y,d$hmr_z,col='blue')
+  segments3d(x=as.vector(t( cbind(d$hml_x, d$hmr_x) )),
+             y=as.vector(t( cbind(d$hml_y, d$hmr_y) )),
+             z=as.vector(t( cbind(d$hml_z, d$hmr_z) )), col='black') 
+}
+twiddle(fMvmtGUI(iframe), 
+        iframe = knob(c(1, length(frames)),1), 
+        auto = FALSE)
+
+# Look at timecourse of angles prior to takeoff
+# ...
 
 # ========================================================================================
 # Explore data

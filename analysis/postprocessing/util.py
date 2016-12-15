@@ -8,6 +8,7 @@
 
 import collections, msgpack
 import numpy as np
+from datetime import datetime
 
 Frame = collections.namedtuple('Frame', 'frame pos vertices trajectory time nearbyVertices')
 

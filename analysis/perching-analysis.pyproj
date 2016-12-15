@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{76b3e4b1-9cd1-4076-a48b-7f13f62bc0b8}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>df_reports\generate_reports.py</StartupFile>
+    <StartupFile>postprocessing\plot_takeoffs.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>

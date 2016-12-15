@@ -8,7 +8,7 @@ import os, sys, dateutil, datetime, winshell
 import pandas as pd
 
 # Change working directory
-os.chdir('Z:/people/Abel/perching-analysis/')
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Global Variables
 VIDEO_SAVING_DELAY_SEC = 60
@@ -43,7 +43,7 @@ def processTrajectory(file, takeoffTrajectory, dataTakeoff):
 # ...
 def processFile(file):
 
-    fname = 'data/'+file+'_Cortex.takeoffs.csv'    
+    fname = file+'_Cortex.takeoffs.csv'    
     if not os.path.isfile(fname): return
     
     dataTakeoff = pd.read_csv(fname)
@@ -65,15 +65,15 @@ def findHighspeedVideos():
                 videos.append( (t, absfile) )
 
 # ...
-def run():
+def run(async=False):
     
     # Search videos
     findHighspeedVideos()
     
     # Find high speed videos
-    files = [x for x in os.listdir('./output')]
+    files = [x for x in os.listdir('../output')]
     for file in files:
-        if os.path.isdir('./output/'+file):
+        if os.path.isdir('../output/'+file):
             processFile(file)
 
 # Entry point for standalone execution

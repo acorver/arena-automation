@@ -12,7 +12,7 @@ import statsmodels.api as sm
 from functools import partial
 import pandas as pd
 
-import extract_perching_locations
+import postprocessing.extract_perching_locations
 
 # Global settings
 DEBUG = False
@@ -22,10 +22,11 @@ IGNORE_COUNT = False
 #SINGLEFILE = '2016-11-07 12-51-23_Cortex.msgpack' # SINGLEFILE = None
 #SINGLEFILE = '2016-11-11 12-20-41_Cortex.msgpack'
 #SINGLEFILE = '2016-11-14 14-09-32_Cortex.msgpack'
+#SINGLEFILE = '2016-12-10 12-18-45.msgpack'
 SINGLEFILE = ''
 
 # Set "overwrite" to True to overwrite existing files
-OVERWRITE = True
+OVERWRITE = False
 
 # Misc. constants
 CORTEX_NAN = 9999999
@@ -41,7 +42,7 @@ TRAJ_SAVE_MINDIST = 500
 TRAJ_SAVE_MINLEN  = 200
 
 # Change data directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'data'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Number of trajectories saved
 numSavedTraj = 0
@@ -223,17 +224,11 @@ def processFile(file):
         for t in openTrajectories:
             processTrajectory(t, fo, foTracking)
     
-    # Process Yframe trajectories (depends on flysim trajectories for full functionality)
-    try:
-        extract_perching_locations.processFile(file)
-    except:
-        pass
-
 # =======================================================================================
 # Main loop
 # =======================================================================================
 
-def run():
+def run(async=False):
         
     # Get files
     files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
@@ -245,7 +240,10 @@ def run():
         processFile(SINGLEFILE)
     else:
         with multiprocessing.Pool(processes=16) as pool:
-            pool.map(processFile, files)
+            (pool.map_async if async else pool.map)(processFile, files)
+            return pool
+
+    return None
 
 if __name__ == "__main__": 
     run()

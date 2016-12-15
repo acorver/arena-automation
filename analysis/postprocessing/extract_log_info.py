@@ -7,7 +7,7 @@ import os, sqlite3, re
 from datetime import datetime
 
 # Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'data'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Helper function
 def getTimeStr(time): return datetime.fromtimestamp(time//1000).strftime('%Y-%m-%d %H:%M:%S')
@@ -18,6 +18,7 @@ def getTimeStr(time): return datetime.fromtimestamp(time//1000).strftime('%Y-%m-
 
 def processFile(file):
     
+    fnameLogOut = file.replace('.log','.log.txt')
     fnameOut = file.replace('.log','.trials.csv')
     
     with open(fnameOut, 'w') as fo:
@@ -40,13 +41,18 @@ def processFile(file):
         logFlysim = []
         buf = ''
         for r in rows:
-            if '[FLYSIM] ' in r[2]:
+            if r[2] != None and '[FLYSIM] ' in r[2]:
                 buf += r[2].replace('[FLYSIM] ','')
                 # Buffer read whole line?
                 if '\r\n' in buf:
                     logFlysim.append( (r[1], buf[0:buf.find('\r\n')]) )
                     buf = buf[buf.find('\r\n')+2:]
-    
+        
+        # Write log to file
+        with open(fnameLogOut, 'w') as foLog:
+            for line in logFlysim:
+                foLog.write(','.join([str(x) for x in list(line)]) + '\n')
+        
         # Process flysim log
         for line in logFlysim:
             m = re.match('Started new trial: speed=([0-9]*), height=([0-9]*), wait=([0-9]*)', line[1])
@@ -61,7 +67,7 @@ def processFile(file):
 # Entry point
 # =======================================================================================
 
-def run():
+def run(async=False):
     # Get all raw data files in data directory
     files = [x for x in os.listdir('./') if x.endswith('.log')]
     

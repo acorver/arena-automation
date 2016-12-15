@@ -14,6 +14,7 @@ namespace common {
 	std::string GetTimeStr(const char* pattern);
 	long long GetTimestamp();
 	std::string GetTimestampStr();
+	std::string GetCommonOutputPrefix();
 
 	void Save(float startTimeAgo, float endTimeAgo);
 

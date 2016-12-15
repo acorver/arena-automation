@@ -10,6 +10,7 @@
 #include <boost/numeric/ublas/vector_expression.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
 #include <boost/atomic.hpp>
+#include <boost/algorithm/string/replace.hpp>
 
 //#include <boost/gil/gil_all.hpp>
 

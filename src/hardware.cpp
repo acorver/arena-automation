@@ -88,12 +88,14 @@ const char* hardware::SendFlySimCommand(const char* cmd) {
 	// Gain exclusive access
 	boost::unique_lock<boost::mutex> scoped_lock(g_mutexFlySim);
 
+	std::string cmdStr = boost::replace_all_copy(std::string(cmd), "%20", " ");
+
 	if (pSerialFlySim) {
 
-		logging::Log("[HARDWARE] Sending FlySim command: %s", cmd);
+		logging::Log("[HARDWARE] Sending FlySim command: %s", cmdStr.c_str());
 
 		char buffer[4096];
-		int n = sprintf(buffer, "%s\n", cmd);
+		int n = sprintf(buffer, "%s\n", cmdStr.c_str());
 
 		pSerialFlySim->WriteData(buffer, n);
 
@@ -106,7 +108,8 @@ const char* hardware::SendFlySimCommand(const char* cmd) {
 
 void hardware::UpdateFlySim() {
 
-	char serialBuffer[1024*16];
+	const int BUF_SIZE = 1024 * 256;
+	char serialBuffer[BUF_SIZE];
 	int  numBytesRead = 0;
 	int  portFlySim = 0;
 
@@ -118,13 +121,13 @@ void hardware::UpdateFlySim() {
 			boost::unique_lock<boost::mutex> scoped_lock(g_mutexFlySim);
 
 			// Read FlySim info
-			memset(serialBuffer, 0, 1024 * 16);
-			numBytesRead = pSerialFlySim->ReadData(serialBuffer, 1024 * 16 - 1);
+			memset(serialBuffer, 0, BUF_SIZE);
+			numBytesRead = pSerialFlySim->ReadData(serialBuffer, BUF_SIZE - 1);
 
 			// Log any messages from FlySim
 			if (numBytesRead > 0) {
-			
-				std::string msg = std::string("[FLYSIM] ") + std::string(serialBuffer);
+				
+				std::string msg = std::string("[FLYSIM] ") + std::string(serialBuffer, numBytesRead);
 				logging::Log(msg.c_str());
 			}
 		} else {

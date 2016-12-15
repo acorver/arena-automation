@@ -1,5 +1,8 @@
 # Ignore build / library directories
 build/
+output/
+reports/
+archive/
 lib/
 deploy/*
 !deploy/*.dll
@@ -7,6 +10,7 @@ cortex-listener/archive/
 data/
 flysim-arduino/archive/
 cortex-listener/
+*.vscode
 
 .Rhistory
 analysis/data/

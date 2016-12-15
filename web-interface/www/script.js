@@ -14,6 +14,23 @@ arenaApp.config(function($routeProvider) {
             controller  : 'mainController'
         })
 
+        .when('/log', {
+            templateUrl : 'log.html',
+            controller  : 'mainController'
+        })
+
+        .when('/flysim', {
+            templateUrl : 'flysim.html',
+            controller  : 'flysimController'
+        })
+
+        // route for the about page
+        .when('/power', {
+            templateUrl : 'power.html',
+            controller  : 'powerController'
+        })
+
+
         // route for the contact page
         .when('/settings', {
             templateUrl : 'settings.html',
@@ -56,6 +73,46 @@ arenaApp.controller('mainController', function($scope, $rootScope, $http) {
             $scope.msg = "Lost communication with server.";
         });
     }, 1000);
+});
+
+/* ======================================================================================
+   Power Controller
+====================================================================================== */
+
+arenaApp.controller('flysimController', function($scope, $rootScope, $http) {
+
+    
+});
+
+/* ======================================================================================
+   Power Controller
+====================================================================================== */
+
+arenaApp.controller('powerController', function($scope, $rootScope, $http) {
+
+    $scope.powerState = '';
+    $scope.allPowerOn = 0;
+
+    $scope.allOn = function(allOn) {
+        var x = '';
+        if (allOn) { x = '+'; } else { x = '-'; }
+        $http.get('/api/power/1/'+x).then(function(response1){});
+        $http.get('/api/power/2/'+x).then(function(response1){});
+    };
+
+    setInterval(function(){
+        
+        $http.get('/api/power/1/s').then(function(response1){
+           $http.get('/api/power/2/s').then(function(response2) {
+               var s = {};
+               var d1 = JSON.parse(response1.data.response.replace(",}","}"));
+               var d2 = JSON.parse(response2.data.response.replace(",}","}"));
+               for (var k in d1) { s['1.'+k] = d1[k]; }
+               for (var k in d2) { s['2.'+k] = d2[k]; }
+               $scope.powerState = JSON.stringify(s);
+           });
+        });
+    }, 5000);
 });
 
 /* ======================================================================================

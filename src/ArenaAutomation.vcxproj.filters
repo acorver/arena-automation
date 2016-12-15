@@ -69,6 +69,12 @@
     <ClCompile Include="..\lib\sqlite\shell.c">
       <Filter>lib\sqlite</Filter>
     </ClCompile>
+    <ClCompile Include="motiontracker_velocity.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="motiontracker_z.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="settings.h">
@@ -109,6 +115,12 @@
     </ClInclude>
     <ClInclude Include="..\lib\sqlite\sqlite3.h">
       <Filter>lib\sqlite</Filter>
+    </ClInclude>
+    <ClInclude Include="motiontracker_velocity.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="motiontracker_z.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

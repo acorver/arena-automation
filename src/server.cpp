@@ -24,7 +24,7 @@ crow::response CreateCrowResponse(std::string str) {
 void server::Run() {
 
 	crow::App<server::DocumentMiddleWare> app;
-	app.get_middleware<server::DocumentMiddleWare>().setDocumentRoot("/www/");
+	//app.get_middleware<server::DocumentMiddleWare>().setDocumentRoot("/www/");
 
 	CROW_ROUTE(app, "/")
 		([]() {

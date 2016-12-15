@@ -6,21 +6,22 @@
 import numpy as np
 import msgpack, collections, math, os, multiprocessing, sys, csv
 from time import time
-from datetime import datetime
+#from datetime import datetime
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 import pandas as pd
 from scipy import stats
 import gc
-from util import *
+from postprocessing.util import *
 
 # Set "overwrite" to True to overwrite existing files
-OVERWRITE = True
+OVERWRITE = False
 
 # ...
 DEBUG = False
 #SINGLEFILE = '2016-11-11 12-20-41_Cortex.msgpack'
 #SINGLEFILE = '2016-11-14 14-09-32_Cortex.msgpack'
+#SINGLEFILE = '2016-12-10 12-18-45.msgpack'
 SINGLEFILE = ''
 IGNORE_COUNT = False
 
@@ -45,7 +46,7 @@ FLYSIM_AXIS_PT1 = np.array([-400,  10])
 FLYSIM_AXIS_PT2 = np.array([ 450, -15])
 
 # Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'data'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # =======================================================================================
 # Process trajectory (either stable/perching or takeoff)
@@ -279,7 +280,7 @@ def processFile(file):
         
         foTracking.write('frame,relframe,trajectory,timestamp,time,takeoffTraj,x,y,z\n')
 
-        for frame in readYFrames(f):                        
+        for frame in readYFrames(file):
             # Print debug info
             numRecords += 1
             if (time() - lastInfoTime) > 5.0:
@@ -326,7 +327,7 @@ def processFile(file):
 # Entry point
 # =======================================================================================
 
-def run():
+def run(async=False):
     
     if SINGLEFILE != "":
         processFile(SINGLEFILE)
@@ -338,7 +339,10 @@ def run():
         files.sort(key=lambda x: -os.path.getmtime(x))
         
         with multiprocessing.Pool(processes=16) as pool:
-            pool.map(processFile, files)
+            (pool.map_async if async else pool.map)(processFile, files)
+            return pool
+    
+    return None
 
 if __name__ == '__main__':    
     run()

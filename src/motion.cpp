@@ -16,6 +16,8 @@
 #include "settings.h"
 #include "photron.h"
 #include "hardware.h"
+#include "motiontracker_velocity.h"
+#include "motiontracker_z.h"
 
 // Global variables
 boost::lockfree::spsc_queue<motion::CortexFrame*,
@@ -23,17 +25,25 @@ boost::lockfree::spsc_queue<motion::CortexFrame*,
 	                         g_FrameBuffer, 
 	                         g_FrameBufferSave;
 boost::atomic<int>           g_nLastFrameIndex;
-std::vector<motion::Body>    bodies;
 int                          saveFramesMaxIndex = -1;
 std::queue<sFrameOfData>     saveBuffer;
-int                          nextBodyIndex = 0;
 int                          totalBufferedFrames = 0;
 unsigned long                lastSavedFrameID;
 std::deque<sFrameOfData*>    recentlySavedFrames;
-bool                         g_bMotionTriggerEnabled = true;
-std::ofstream                g_fsMotionDebugInfo;
-bool                         g_bMotionDebugEnabled = true;
-int                          g_nLastTakeoffFrame = -1;
+
+// Initialize global variables
+std::ofstream g_fsMotionDebugInfo;
+bool g_bMotionDebugEnabled = true;
+bool g_bMotionTriggerEnabled = true;
+
+// Helper function
+vector<float> motion::CortexToBoostVector(tMarkerData d) {
+	vector<float> m(3);
+	m[0] = d[0];
+	m[1] = d[1];
+	m[2] = d[2];
+	return m;
+}
 
 // ----------------------------------------------
 // Name:  init()
@@ -71,7 +81,7 @@ int motion::Init( boost::thread* pThread ) {
     char szHostMulticastAddress[64];
     char szTalkToClientsNicCardAddress[64];
     char szClientsMulticastAddress[64];
-        
+    
     nResult = Cortex_GetAddresses(
         szTalkToHostNicCardAddress,
         szHostNicCardAddress,
@@ -92,8 +102,11 @@ int motion::Init( boost::thread* pThread ) {
         return 1;
     }
 
+	// Start recording Cortex
+	RecordCortex(true);
+
     // Initialize debug info for evaluating motion tracking data in real time
-    g_fsMotionDebugInfo = std::ofstream(common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S.motionlog"));
+    g_fsMotionDebugInfo = std::ofstream( (common::GetCommonOutputPrefix()+".motionlog") );
 
     // Initialize separate thread
     boost::thread t1(motion::WatchFrameBuffer);
@@ -109,6 +122,30 @@ void motion::SetLogEnabled(bool enabled) {
 
 void motion::EnableMotionTrigger(bool enabled) {
     g_bMotionTriggerEnabled = enabled;
+}
+
+// ----------------------------------------------
+// Name:  RecordCortex()
+// Desc:  Send a request for Cortex to record data. The recorded data is later post-processed to 
+//        extract the raw data and merge it with the other dataset.
+// ----------------------------------------------
+
+void motion::RecordCortex(bool record) {
+
+	int   nRet = RC_GeneralError;
+	void *pResponse;
+	int   nBytes;
+
+	for (int tries = 0; tries < 5; tries++) {
+		if (record) {
+			nRet = Cortex_Request("StartRecording", &pResponse, &nBytes);
+		} else {
+			nRet = Cortex_Request("StopRecording", &pResponse, &nBytes);
+		}
+		if (nRet == RC_Okay) {
+			break;
+		}
+	}
 }
 
 // ----------------------------------------------
@@ -151,13 +188,6 @@ void motion::BufferFrame(sFrameOfData* frameOfData) {
 
     // Record the most recent frame index
     g_nLastFrameIndex = frameOfData->iFrame;
-    
-    // Log stats
-    totalBufferedFrames += 1;
-    if ((totalBufferedFrames % 1000) == 0) {
-        // DEBUG:
-        //logging::Log("[MOTION] Received %d frames from cortex.", totalBufferedFrames);
-    }
 }
 
 // ----------------------------------------------
@@ -197,10 +227,10 @@ void motion::WatchFrameBufferSave() {
 
     int iFrame = 0;
 
-    std::string file = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S.msgpack");
+	std::string file = (common::GetCommonOutputPrefix() + ".msgpack");
     std::ofstream fo(file.c_str(), std::ofstream::binary);
 
-    std::string file2 = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S_Cortex_experimental.msgpack");
+	std::string file2 = (common::GetCommonOutputPrefix() + "experimental.msgpack");
     std::ofstream fo2(file.c_str(), std::ofstream::binary);
 
 	CortexFrame *pCortexFrame;
@@ -245,296 +275,19 @@ void motion::WatchFrameBufferSave() {
 //           recording window.
 // ----------------------------------------------
 
-vector<float> CortexToBoostVector(tMarkerData d) {
-    vector<float> m(3);
-    m[0] = d[0];
-    m[1] = d[1];
-    m[2] = d[2];
-    return m;
-}
-
-void ComputeMotionProps(std::deque<motion::PositionHistory> &markers, int offset, 
-    int windowSize, float *avgSpeed, float *avgAcceleration, float *avgMarkerNum) {
-    
-    int window = std::min(windowSize, int(markers.size()) - offset) - 1;
-
-    *avgMarkerNum     = 0.0f;
-    *avgSpeed         = 0.0f;
-
-    // Only start computing when complete window data has been gathered to prevent statistical decisions 
-    // based on little data // TODO: Have some kind of more meaningful function behavior...
-    if (markers.size() < windowSize) { return; }
-
-    for (int j = 0; j < window; j++) {
-        
-        *avgMarkerNum     = *avgMarkerNum    + markers[offset + j].numMarkers    / float(window);
-        *avgSpeed         = *avgSpeed        + markers[offset + j].velocity        / float(window);
-    }
-}
-
-void motion::Body::Update() {
-
-    if (this->positionHistory.size() < _s<int>("tracking.takeoff_detection_window") ||
-        this->positionHistory.size() < _s<int>("tracking.stationary_detection_window") || 
-        this->positionHistory.size() < _s<int>("tracking.takeoff_detection_velocity_span")) { return; }
-
-    PositionHistory* p = &(this->positionHistory.front());
-    PositionHistory* pt = &(this->positionHistory[_s<int>("tracking.takeoff_detection_velocity_span") - 1]);
-    p->velocity = norm_2(p->position - pt->position) * _s<int>("cortex.fps_analysis") / float(_s<int>("tracking.takeoff_detection_window"));
-    PositionHistory* ps = &(this->positionHistory[_s<int>("tracking.stationary_detection_window")-1]);
-    
-    // Occasionally, we fully recompute the averages to prevent accumulated floating precision errors
-    // from biasing our values
-    numUpdates++;
-    if (numUpdates >= 0 || this->positionHistory.size() == _s<int>("tracking.takeoff_detection_window") ||
-            this->positionHistory.size() == _s<int>("tracking.stationary_detection_window")) {
-        numUpdates = 0;
-
-        // Compute takeoff statistics
-        ComputeMotionProps(this->positionHistory, 0, _s<int>("tracking.takeoff_detection_window"),
-            &this->avgTakeoffSpeed, &this->avgTakeoffAcceleration, &this->avgTakeoffMarkerNum);
-
-        // Compute stationary statistics
-        ComputeMotionProps(this->positionHistory, 0, _s<int>("tracking.stationary_detection_window"),
-            &this->avgStationarySpeed, &this->avgStationaryAcceleration, &this->avgStationaryMarkerNum);
-
-        return;
-    }
-
-    // Average the newly added frame (NOTE: Currently the various variables (speed, etc.) are 
-    // not valid until the *_DETECTION_WINDOW buffer size is reached, as we divide by a constant
-    // window size rather than actual buffer. Potential TODO.)
-    p = &(this->positionHistory.front());
-
-    this->avgTakeoffSpeed        += p->velocity     / float(_s<int>("tracking.takeoff_detection_window"));
-    this->avgTakeoffMarkerNum    += p->numMarkers   / float(_s<int>("tracking.takeoff_detection_window"));
-
-    this->avgStationarySpeed        += p->velocity     / float(_s<int>("tracking.stationary_detection_window"));
-    this->avgStationaryMarkerNum    += p->numMarkers   / float(_s<int>("tracking.stationary_detection_window"));
-
-    // De-average frames that just moved out of the averaging window
-    if (this->positionHistory.size() >= _s<int>("tracking.takeoff_detection_window")) {
-
-        p = &(this->positionHistory[_s<int>("tracking.takeoff_detection_window") - 1]);
-        
-        this->avgTakeoffSpeed        -= p->velocity     / float(_s<int>("tracking.takeoff_detection_window"));
-        this->avgTakeoffMarkerNum    -= p->numMarkers   / float(_s<int>("tracking.takeoff_detection_window"));
-    }
-
-    if (this->positionHistory.size() >= _s<int>("tracking.stationary_detection_window")) {
-
-        p = &(this->positionHistory[_s<int>("tracking.stationary_detection_window")-1]);
-        
-        this->avgStationaryMarkerNum  -= p->numMarkers   / float(_s<int>("tracking.stationary_detection_window"));
-    }
-
-    // Remove points that are too old
-    if (this->positionHistory.size() > _s<int>("tracking.max_body_tracking_history")) {
-        this->positionHistory.pop_back();
-    }
-}
-
 void motion::ProcessFrame(CortexFrame *pCortexFrame) {
 
-	sFrameOfData* frameOfData = pCortexFrame->pFrame;
+	if (_s<std::string>("tracking.method") == "velocity") {
+		motion::ProcessFrame_VelocityThreshold(pCortexFrame);
 
-    // Variables
-    std::vector<vector<float>> markers;
-    motion::Body* pBody = 0;
-
-    // Skip every other frame
-    if ( (frameOfData->iFrame % 2) == 0) { return;  }
-
-    //   o Add identified markers
-    for (int i = 0; i < frameOfData->nBodies; i++) {
-
-        if (frameOfData->BodyData[i].nMarkers == 0) { continue; }
-
-        // Only process YFrame's 
-        if (std::string(frameOfData->BodyData[i].szName).find(_s<std::string>("tracking.body_name")) == std::string::npos &&
-            _s<std::string>("tracking.body_name") != "") {
-            continue;
-        }
-
-        // First try center marker
-		vector<float> m = CortexToBoostVector(frameOfData->BodyData[i].Markers[1]);
-		if (m[0] == CORTEX_INVALID_MARKER) { 
-			m = CortexToBoostVector(frameOfData->BodyData[i].Markers[2]);
-		}
-		if (m[0] == CORTEX_INVALID_MARKER) {
-			continue;
-		}
-
-        // Find the closest body
-        int closestBody = -1; int closestDistance = INT_MAX;
-        for (int j = 0; j < bodies.size(); j++) {
-
-            // Only match against bodies with same name
-            if (bodies[j].strName != std::string(frameOfData->BodyData[i].szName)) { continue; }
-
-            int dist = INT_MAX;
-            if (bodies[j].positionHistory.size() >= 1) { 
-                dist = norm_2(bodies[j].positionHistory.front().position - m); 
-            }
-
-            if (dist < closestDistance) {
-                closestBody = j;
-                closestDistance = dist;
-            }
-
-        }
-
-        if (closestDistance > _s<int>("tracking.max_body_tracking_dist")) {
-            // Create new tracked body
-            bodies.push_back(motion::Body());
-            pBody = &bodies.back();
-            pBody->strName = std::string(frameOfData->BodyData[i].szName);
-        } else {
-            pBody = &(bodies[closestBody]);
-        }
-
-        // Append marker to body:
-        PositionHistory p(frameOfData->iFrame);
-        p.position = m;
-        p.numMarkers = frameOfData->BodyData[i].nMarkers;
-        pBody->positionHistory.push_front(p);
-
-        // Write each marker and the body it was assigned to
-        if (g_bMotionDebugEnabled) {
-            g_fsMotionDebugInfo << "marker," << frameOfData->iFrame << "," << pBody->iBody << "," << m[0] << "," << m[1] << "," << m[2] << "\n";
-        }
-    }
-
-    for (int i = 0; i < bodies.size(); i++) {
-        
-        // Delete bodies that haven't been extended with new marker frames for a while
-        if ( frameOfData->iFrame - bodies[i].positionHistory.front().iFrame > _s<int>("tracking.max_body_tracking_gap") && 
-                bodies[i].takeOffStartFrame == -1) {
-            bodies.erase( bodies.begin() + i );
-            i -= 1;
-        } else {
-            // Otherwise update the tracking info associated with the body
-            bodies[i].Update();
-        }
-    }
-
-    // Determine if take-off occured over particular time window
-    for (int i = 0; i < bodies.size(); i++) {
-
-		// Takeoffs only allowed for this body a certain frames after the last recording
-		if ( frameOfData->iFrame - g_nLastTakeoffFrame >= _s<int>("tracking.min_takeoff_cooldown") ) {
-			// Detect take-off based on peak motion velocity
-			if ( bodies[i].avgTakeoffSpeed > _s<float>("tracking.takeoff_speed_threshold") && bodies[i].takeOffStartFrame == -1 ) {
-				if ( bodies[i].avgTakeoffMarkerNum > _s<float>("tracking.dragonfly_marker_minimum") ) {
-					// Detect the actual takeoff based on near-zero speed
-					int iTakeOff;
-					float stationaryAvgA, stationaryAvgS, stationaryAvgM;
-
-					for (iTakeOff = 0; iTakeOff < (_s<int>("tracking.max_body_tracking_history") - _s<int>("tracking.stationary_detection_window")); iTakeOff++) {
-
-						ComputeMotionProps(bodies[i].positionHistory, iTakeOff, _s<int>("tracking.stationary_detection_window"),
-							&stationaryAvgS, &stationaryAvgA, &stationaryAvgM);
-
-						if (/*stationaryAvgA < settings::GetSetting("tracking.stationary_acceleration_threshold") && */
-							stationaryAvgS < _s<float>("tracking.stationary_speed_threshold")) {
-
-							break; // Landing detected!
-						}
-					}
-
-					// Store take-off frame
-					if (iTakeOff < bodies[i].positionHistory.size()) {
-						bodies[i].takeOffStartFrame = bodies[i].positionHistory[iTakeOff].iFrame;
-					}
-					else {
-						bodies[i].takeOffStartFrame = bodies[i].positionHistory.back().iFrame;
-					}
-
-					// Log data
-					logging::Log("[MOTION] Detected takeoff with peak velocity %f, marker num %f", bodies[i].avgTakeoffSpeed, bodies[i].avgTakeoffMarkerNum);
-					if (g_bMotionDebugEnabled) {
-						g_fsMotionDebugInfo << "takeoff," << frameOfData->iFrame << "," << bodies[i].iBody << "," << bodies[i].takeOffStartFrame << "\n";
-					}
-				} else {
-					logging::Log("[MOTION] Would've detected takeoff, but body doesn't have the right number of markers to be a dragonfly...");
-				}
-			}
-		}
-
-        // Log info
-        if (g_bMotionDebugEnabled) {
-            g_fsMotionDebugInfo << "body," <<
-                frameOfData->iFrame << "," << bodies[i].iBody << "," <<
-                bodies[i].positionHistory[0].position[0] << "," <<
-                bodies[i].positionHistory[0].position[1] << "," <<
-                bodies[i].positionHistory[0].position[2] << "," <<
-                bodies[i].avgTakeoffSpeed << "," << bodies[i].avgTakeoffAcceleration << "," << bodies[i].avgTakeoffMarkerNum << 
-                bodies[i].avgStationarySpeed << "," << bodies[i].avgStationaryAcceleration << "," << bodies[i].avgStationaryMarkerNum << "\n";
-        }
-    }
-
-    // Detect if dragonfly is stationary
-    bool allStationary = true;
-    int takeOffStartFrame = -1;
-    for (int i = 0; i < bodies.size(); i++) {
-        if (bodies[i].takeOffStartFrame >= 0) {
-            if (takeOffStartFrame == -1) {
-                takeOffStartFrame = bodies[i].takeOffStartFrame;
-            } else {
-                takeOffStartFrame = std::min(takeOffStartFrame, bodies[i].takeOffStartFrame);
-            }
-
-            if (bodies[i].avgStationarySpeed > _s<float>("tracking.stationary_speed_threshold")
-                && (frameOfData->iFrame - bodies[i].takeOffStartFrame < _s<int>("tracking.landing_timeout"))) {
-                allStationary = false;
-            } else {
-                if (frameOfData->iFrame - bodies[i].takeOffStartFrame > _s<int>("tracking.landing_timeout") && 
-                    bodies[i].avgStationarySpeed > _s<float>("tracking.stationary_speed_threshold")) {
-                    
-					logging::Log("[MOTION] Forced detection of landing as recording duration maximum (%d frames) was reached.", _s<int>("tracking.landing_timeout"));
-					allStationary = true;
-                }
-                // Log data
-                if (g_bMotionDebugEnabled) {
-                    g_fsMotionDebugInfo << "landing," << frameOfData->iFrame << "," << bodies[i].iBody << "," << frameOfData->iFrame - _s<int>("tracking.stationary_detection_window") << "\n";
-                }
-            }
-        }
-    }
-
-    if (allStationary && takeOffStartFrame!=-1) {
-
-        int takeOffEndFrame = frameOfData->iFrame - _s<int>("tracking.stationary_detection_window");
-
-        // Retrieve recording from camera
-        float startTimeAgo = (frameOfData->iFrame - takeOffStartFrame) / float(_s<int>("cortex.fps"));
-        float endTimeAgo = (frameOfData->iFrame - takeOffEndFrame) / float(_s<int>("cortex.fps"));
-
-        // Always log basic information
-        logging::Log("[D] Takeoff window [-%f,-%f] with respect to now (Cortex frame %d).", startTimeAgo, endTimeAgo, frameOfData->iFrame);
-
-		// Reset all
-		for (int i = 0; i < bodies.size(); i++) {
-			bodies[i].lastTakeOffStartFrame = frameOfData->iFrame; // bodies[i].takeOffStartFrame;
-			g_nLastTakeoffFrame = std::max(g_nLastTakeoffFrame, bodies[i].lastTakeOffStartFrame);
-			bodies[i].takeOffStartFrame = -1;
-		}
-
-		// Save data from this frame
-        if (g_bMotionTriggerEnabled) {
-            common::Save(startTimeAgo, endTimeAgo);
-        } else {
-            logging::Log("[MOTION] Not saving takeoff as motion triggering is currently disabled.");
-        }
-
-        if (g_bMotionDebugEnabled) {
-            g_fsMotionDebugInfo << "alllanded," << frameOfData->iFrame << "\n";
-        }
-    }
+	} else if (_s<std::string>("tracking.method") == "z") {
+		motion::ProcessFrame_Z(pCortexFrame);
+	}
 
 	// Log info on frame processing time
 	if (g_bMotionDebugEnabled) {
-		g_fsMotionDebugInfo << "delay_frame," << frameOfData->iFrame << "," << pCortexFrame->nTimestampReceived << "," << common::GetTimestamp() << "\n";
+		g_fsMotionDebugInfo << "delay_frame," << pCortexFrame->pFrame->iFrame << "," << 
+			pCortexFrame->nTimestampReceived << "," << common::GetTimestamp() << "\n";
 	}
 }
 
@@ -627,8 +380,6 @@ void motion::SaveFrameMsgPack(std::ofstream& o, CortexFrame *pCortexFrame) {
 }
 
 void motion::Save(std::string prefix, float startTimeAgo, float endTimeAgo) {
-
-    // TODO! Save frames in saveBuffer, to make sure they're not discarded/overwritten!!!!!!!!!!!
 
     logging::Log("[MOTION] Saving Cortex data.");
 

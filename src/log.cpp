@@ -27,7 +27,7 @@ void logging::Init() {
 	sqlite3_initialize();
 
     /* Open database */
-    if ( sqlite3_open( common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S.log").c_str(), &g_pDB) ) {
+    if ( sqlite3_open( (common::GetCommonOutputPrefix()+".log").c_str(), &g_pDB) ) {
         fprintf(stderr, "[LOG] Could not init log. Can't open database: %s\n", sqlite3_errmsg(g_pDB));
         g_pDB = 0;
         return;
@@ -58,21 +58,44 @@ void logging::Log(const char* msg, ...) {
 	vsprintf(buffer, msg, args);
     va_end(args);
 
-	std::string sql = "INSERT INTO LOG VALUES (\"" + 
-		common::GetTimestampStr() + "," + std::string(buffer) + "\")";
+	std::string sql = "INSERT INTO LOG (MSG) VALUES (?)";
+	sqlite3_stmt *pStmt = 0;
+	std::string ts = common::GetTimestampStr();
+	std::string s = std::string(buffer);
+	std::string s2 = ts + "," + s;
 	
-	for (int tryNum = 0; tryNum < 5; tryNum++) {
-		if (sqlite3_exec(g_pDB, sql.c_str(), 0, 0, &zErrMsg) == SQLITE_OK) { 
-			break; 
-		}
-	}
+	for (int tryNum = 0; tryNum < 1; tryNum++) {
 
-	sql = "INSERT INTO PLOG (timestamp, msg) VALUES (" +
-		common::GetTimestampStr() + ",\"" + std::string(buffer) + "\")";
+		sql = "INSERT INTO LOG VALUES (\"" + boost::replace_all_copy(
+			common::GetTimestampStr() + "," + std::string(buffer), "\"", "\\\"") + "\")";
 
-	for (int tryNum = 0; tryNum < 5; tryNum++) {
 		if (sqlite3_exec(g_pDB, sql.c_str(), 0, 0, &zErrMsg) == SQLITE_OK) {
 			break;
+		}
+
+		/*
+		if (sqlite3_prepare_v2(g_pDB, sql.c_str(), -1, &pStmt, 0) == SQLITE_OK) {
+			sqlite3_bind_text(pStmt, 0, s.c_str(), s.size(), SQLITE_TRANSIENT);
+			while (sqlite3_step(pStmt) != SQLITE_DONE) {
+				// 
+				int test = 0;
+			}
+			sqlite3_finalize(pStmt);
+		}
+		else {
+			const char* err = sqlite3_errmsg(g_pDB);
+		}
+		*/
+	}
+
+	sql = "INSERT INTO PLOG (timestamp, msg) VALUES (?,?)";
+	
+	for (int tryNum = 0; tryNum < 1; tryNum++) {
+		if (sqlite3_prepare_v2(g_pDB, sql.c_str(), -1, &pStmt, 0) == SQLITE_OK) {
+			sqlite3_bind_text(pStmt, 0, ts.c_str(), ts.size(), SQLITE_TRANSIENT);
+			sqlite3_bind_text(pStmt, 1, s.c_str(), s.size(), SQLITE_TRANSIENT);
+			while (sqlite3_step(pStmt) != SQLITE_DONE) {}
+			sqlite3_finalize(pStmt);
 		}
 	}
 
@@ -92,10 +115,12 @@ std::string logging::QueryToJSON(std::string query, int start) {
 		
 		if (nRow > 0) { json += ","; }
 
-		json += "\"" + std::string(reinterpret_cast<const char*>(
-			sqlite3_column_text(pStmt, 0))) + "\"";
-
-		nRow++;
+		const unsigned char* c = sqlite3_column_text(pStmt, 0);
+		if (c) {
+			std::string s = std::string(reinterpret_cast<const char*>(c));
+			json += "\"" + json::escape_string(s) + "\"";
+			nRow++;
+		}
 	}
 
 	sqlite3_finalize(pStmt);

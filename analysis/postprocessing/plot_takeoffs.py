@@ -10,11 +10,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 # Set working directory
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../data'))
 
 # Global variables / settings
 DEBUG = False
-OVERWRITE = True
+OVERWRITE = False
 PLOT_APPEND_BEFORE = 25
 PLOT_APPEND_AFTER = 200
 
@@ -23,7 +23,10 @@ trajectoriesLeft = {}
 # Plot a given (1) flysim trajectory, (2) dF takeoff trajectory, (3) and frames after onset
 def plotTrajectory(file, takeoffTraj, titleSuffix='', upward=True, flysim=False):
     
-    saveDir = 'output/'+file+'/'+('flysim' if flysim else 'takeoff')+('_upward' if upward else '')+'/'
+    dirname = file.replace('.msgpack','')
+    if '_' in dirname: dirname = dirname[:dirname.find('_')]
+    saveDir = '../output/'+dirname+'/'+ \
+        ('flysim' if flysim else 'takeoff')+('_upward' if upward else '')+'/'
     os.makedirs(saveDir, exist_ok=True)
     foutname = saveDir+str(takeoffTraj)+'.mp4'
     
@@ -34,19 +37,19 @@ def plotTrajectory(file, takeoffTraj, titleSuffix='', upward=True, flysim=False)
     
     try:
         # Load takeoff info
-        dataTakeoff = pd.read_csv('data/'+file+'_Cortex.takeoffs.csv')
+        dataTakeoff = pd.read_csv(file.replace('.msgpack','.takeoffs.csv'))
         dataTakeoff = dataTakeoff.rename(columns=lambda x: x.strip())
 
         dataTakeoff = dataTakeoff[dataTakeoff.index==takeoffTraj]
 
         # Select yframe frames
-        dataDf    = pd.read_csv('data/'+file+'_Cortex.tracking.csv')
+        dataDf    = pd.read_csv(file.replace('.msgpack','.tracking.csv'))
         dataDf['takeoffFrame'] = dataDf['relframe'] # TMP #
         dataDfAll = dataDf
         dataDf    = dataDf[dataDf.takeoffTraj==takeoffTraj]
         
         # Select flysim frames
-        dataFs = pd.read_csv('data/'+file+'_Cortex.flysim.tracking.csv')
+        dataFs = pd.read_csv(file.replace('.msgpack','.flysim.tracking.csv'))
         
         dataFs = dataFs[dataFs.trajectory==int(dataTakeoff.flysimTraj)]
         
@@ -121,7 +124,7 @@ def plotTrajectory(file, takeoffTraj, titleSuffix='', upward=True, flysim=False)
 
 # ...
 def getTakeoffTrajectories(file, upward=True, flysim=False):
-    dataTakeoff = pd.read_csv('data/'+file+'_Cortex.takeoffs.csv')
+    dataTakeoff = pd.read_csv(file.replace('.msgpack','.takeoffs.csv'))
     dataTakeoff = dataTakeoff.rename(columns=lambda x: x.strip())
     
     # Only process takeoffs with a minimum amount of perching preceding it
@@ -149,25 +152,38 @@ def getTakeoffTrajectories(file, upward=True, flysim=False):
     
     return zip(dataTakeoff.index.tolist(), titleSuffixes)
 
+# =======================================================================================
+# Entry point
+# =======================================================================================
 
-# ...
-def run():
-    for file in ['2016-11-15 11-23-04', '2016-11-11 12-20-41']:
-        
-        # TODO: Remove .tmp.mp4 files... they are leftovers from previous scripts
+def run(async=False):
     
-        params = []
+    # Get files
+    files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
+
+    # Process newest files first
+    files.sort(key=lambda x: -os.path.getmtime(x))
+    
+    # Files to plot:
+    print('Files to plot:\n'+'\n'.join(files))
+    
+    params = []
+    for file in files:
         for upward in [False,]: #True, False]:
             for flysim in [True,False]: 
                 takeoffTrajs = getTakeoffTrajectories(file, upward=False, flysim=flysim)
                 params += [(file, x[0], x[1], upward, flysim) for x in takeoffTrajs]
     
-        if DEBUG:
-            plotTrajectory(params[0][0], params[0][1], params[0][2], params[0][3])
-        else:
-            trajectoriesLeft[file] = len(params)
-            with multiprocessing.Pool(processes=12) as pool:
-                pool.starmap(plotTrajectory, params)
+    if DEBUG:
+        for param in params:
+            plotTrajectory(param[0], param[1], param[2], param[3])
+    else:
+        trajectoriesLeft[file] = len(params)
+        with multiprocessing.Pool(processes=12) as pool:
+            (pool.starmap_async if async else pool.starmap)(plotTrajectory, params)
+            return pool
+    
+    return None
 
 if __name__ == "__main__":
     run()

@@ -9,7 +9,7 @@ from datetime import datetime
 #
 
 # Set working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'data'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Set "overwrite" to True to overwrite existing files
 OVERWRITE = False
@@ -49,15 +49,12 @@ def processFile(file):
         print(str(e))
         os.remove(outfile)
 
-def run():
+def run(async=False):
     if SINGLE_FILE == "":
         files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
         with multiprocessing.Pool(processes=12) as pool:
-            pool.map(processFile, files)
-            try:
-                pool.join()
-            except:
-                pass
+            (pool.map_async if async else pool.map)(processFile, files)
+            return pool
     else:
         processFile(SINGLE_FILE)
 

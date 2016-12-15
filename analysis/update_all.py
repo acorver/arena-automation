@@ -4,6 +4,7 @@
 # important statistics of the behavior
 #
 
+import os
 from subprocess import call
 
 from df_reports import generate_reports
@@ -17,14 +18,47 @@ from postprocessing import extract_headmovements
 from postprocessing import create_highspeed_links
 from postprocessing import plot_takeoffs
 
+# TODO: Make arena interface display list of reports... =) And generate placeholder "in progress" html files?
+
+# Working directory is data directory
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
+
 if __name__ == "__main__":
+    
     # Process data with Python scripts
-    extract_flysim.run()
-    extract_perch_locations.run()
-    extract_perching_locations.run()
-    extract_perching_orientations.run()
+    p1 = extract_flysim.run(async=False)
     extract_log_info.run()
-    extract_headmovements.run()
-    plot_takeoffs.run()
-    create_highspeed_links.run()
+    p2 = extract_perch_locations.run(async=False)
+    
+    # Make sure the previous processes have finished before starting the next ones
+    p1.join()
+    p2.join()
+    
+    print("Done processing FlySim, now computing takeoffs.")
+    
+    # After FlySim trajectories have been extracted, we can process perching locations
+    p3 = extract_perching_locations.run(async=False)
+    
+    #extract_perching_orientations.run(async=True)
+    #extract_headmovements.run()
+    
+    # Make sure the previous processes have finished before starting the next ones
+    p3.join()
+    
+    print("Done processing data, now plotting takeoffs.")
+    
+    p5 = plot_takeoffs.run(async=False)
+    create_highspeed_links.run(async=False)
+    
+    # Make sure the previous processes have finished before generating the final report
+    p5.join()
+    
+    print("Done plotting takeoffs, now generating reports.")
+
+    # Generate the final report
     generate_reports.run()
+    
+    # Print done
+    print("All data analysis is up to date.")
+    
+    input("Press any button to exit.") 

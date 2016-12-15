@@ -24,7 +24,7 @@ def flatten(z): return [x for y in z for x in y]
 # Global settings
 # ================================================
 
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'test'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../test'))
 
 # Debugging?
 DEBUG = False

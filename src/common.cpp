@@ -6,6 +6,7 @@
 #include "usbcamera.h"
 #include "motion.h"
 #include "log.h"
+#include "settings.h"
 
 std::wstring common::s2ws(const std::string& s)
 {
@@ -51,6 +52,18 @@ std::string common::GetTimeStr(const char* pattern) {
 	return std::string(ss.str().c_str());
 }
 
+// This function returns a prefix for all data files to use
+std::string g_CommonOutputPrefix = "";
+std::string common::GetCommonOutputPrefix() {
+
+	if (g_CommonOutputPrefix == "") {
+		g_CommonOutputPrefix == common::GetTimeStr(_s<std::string>("output_prefix").c_str());
+	} else {
+		return g_CommonOutputPrefix;
+	}
+}
+
+
 long long common::GetTimestamp() {
 	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
@@ -69,7 +82,7 @@ void _Save(float startTimeAgo, float endTimeAgo) {
 	logging::Log("Saving [%f, %f].", startTimeAgo, endTimeAgo);
 
 	// Determine the prefix to use for saving the data files
-	std::string prefix = common::GetTimeStr("./data/%Y-%m-%d %H-%M-%S_");
+	std::string prefix = common::GetCommonOutputPrefix() + ")";
 
 	// Save motion capture data
 	motion::Save(prefix, startTimeAgo, endTimeAgo);

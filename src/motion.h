@@ -6,32 +6,13 @@
 
 using namespace boost::numeric::ublas;
 
-extern int nextBodyIndex;
+// Initialize global variables
+extern int             nextBodyIndex;
+extern std::ofstream   g_fsMotionDebugInfo;
+extern bool            g_bMotionDebugEnabled;
+extern bool            g_bMotionTriggerEnabled;
 
 namespace motion {
-
-	struct PointCloud
-	{
-		std::vector<tMarkerData>  pts;
-		inline size_t kdtree_get_point_count() const { return pts.size(); }
-	};
-
-	typedef struct PositionHistory {
-		boost::numeric::ublas::vector<float> position;
-		float velocity;
-		float acceleration;
-		int numMarkers;
-		int iFrame;
-
-		PositionHistory(int frame) {
-			position = zero_vector<float>(3);
-			velocity = 0.0f;
-			acceleration = 0.0f;
-			numMarkers = 0;
-			iFrame = frame;
-		}
-
-	} PositionHistory;
 
 	typedef struct CortexFrame {
 		sFrameOfData* pFrame;
@@ -42,53 +23,16 @@ namespace motion {
 		}
 	};
 
-	typedef struct Body { 
-		
-		int iBody;
-		int takeOffStartFrame;
-		int lastTakeOffStartFrame;
-		vector<float> takeOffPosition;
-		int numUpdates;
-		std::string strName;
-
-		std::deque<PositionHistory> positionHistory;
-
-		// Statistics for take-off detection
-		float avgTakeoffSpeed;
-		float avgTakeoffAcceleration;
-		float avgTakeoffMarkerNum;
-
-		// Statistics for stationary detection
-		float avgStationarySpeed;
-		float avgStationaryAcceleration;
-		float avgStationaryMarkerNum;
-
-		Body() {
-			takeOffStartFrame = lastTakeOffStartFrame = -1;
-			takeOffPosition = zero_vector<float>(3);
-			iBody = nextBodyIndex;
-			nextBodyIndex += 1;
-			numUpdates = 0;
-			strName = "";
-
-			avgTakeoffSpeed = avgTakeoffAcceleration = avgTakeoffMarkerNum = 0.0f;
-			avgStationarySpeed = avgStationaryAcceleration = avgStationaryMarkerNum = 0.0f;
-		}
-
-		bool IsVirtualMarker() {
-			return !strName.empty();
-		}
-
-		void Update();
-
-	} Body;
+	vector<float> CortexToBoostVector(tMarkerData d);
 
 	int Init(boost::thread* pThread);
 
 	void Test();
 
 	void SetLogEnabled(bool enabled);
-
+	
+	void RecordCortex(bool record);
+	
 	void BufferFrame(sFrameOfData* FrameOfData);
 
 	// Load/Save .cap frame data

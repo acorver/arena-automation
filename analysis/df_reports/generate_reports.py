@@ -33,15 +33,15 @@ import vispy.visuals, vispy.scene, vispy.scene.visuals
 from vispy.color import Color
 
 # Change working directory
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../data'))
 
 # ========================================================
 # Global Variables
 # ========================================================
 
 # Change output directory
-DIR_REPORTS         = './reports/'
-DIR_DATA            = './data/'
+DIR_REPORTS         = '../reports/'
+DIR_DATA            = ''
 OVERWRITE           = True
 SHOW_3DCANVAS       = False
 IMG_DPI             = 200
@@ -88,11 +88,22 @@ def getDataPerches(data):
     return d
 
 # ========================================================
+# Plot frame processing times
+# ========================================================
+
+def plotProcessingDelays(dir, data):
+    
+    # Open motion log file if it exists
+    
+    
+    # ...
+    pass
+
+# ========================================================
 # Plot perching locations
 # ========================================================
 
-def plotPerchingLocations2D(dir, data):
-    
+def plotPerchingLocations2D(dir, data):    
     # Load perching data
     perches = getDataPerches(data)
     
@@ -135,7 +146,7 @@ def plotPerchingLocations2D(dir, data):
 
     # Free data
     gc.collect()
-    
+
 # ========================================================
 # Plot trajectories in 3D
 # ========================================================
@@ -153,7 +164,7 @@ def plotTrajectories3D(dir, data):
         dataTakeoff = getDataTakeoffs(data)
         
         # Select yframe frames
-        dataDf    = pd.read_csv('data/'+file.replace('.msgpack','.tracking.csv'))
+        dataDf    = pd.read_csv(file.replace('.msgpack','.tracking.csv'))
         dataDf['takeoffFrame'] = dataDf['relframe'] # TMP #
         
         if len(dataDf.index) == 0: 
@@ -229,7 +240,7 @@ def plotTrajectories3D(dir, data):
 
 def plotTrialStatistics(dir, data):
     # Plot trial statistics
-    dataTrials = pd.read_csv('data/2016-11-14 14-09-16.trials.csv', sep=',')
+    dataTrials = pd.read_csv('2016-11-14 14-09-16.trials.csv', sep=',')
     dataTrials = dataTrials.rename(columns=lambda x: x.strip())
 
     fig = plt.figure(figsize=(8,6), dpi=IMG_DPI)
@@ -333,21 +344,29 @@ def plotDailyActivity(dir, data):
     data['srcDailyActivity'] = outName
 
 # ========================================================
+# Plot all flysim poinst to indicate the range of trajectories
+# ========================================================
+
+
+
+# ========================================================
 # Process file
 # ========================================================
 
 def processFile(file):
     
     # Determine output directory/files
-    dir = DIR_REPORTS + file[:file.find('_')] + '/'
+    dir = DIR_REPORTS + file[:(file.find('_') if '_' in file else len(file))] + '/'
     outFile = dir + 'index.html'
     
     # Initialize report directory
     # shutil.rmtree(dir, ignore_errors=True)
-    dir_util.copy_tree('./df_reports/templates/static/', dir)
+    srcPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates/static/')
+    dir_util.copy_tree(srcPath, dir)
 
     # Create Jinja environment (for HTML template rendering)
-    env = Environment(loader=FileSystemLoader('./df_reports/templates'))
+    envPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates/')
+    env = Environment(loader=FileSystemLoader(envPath))
     template = env.get_template('index.html')
     
     # Initialize report data
@@ -359,9 +378,14 @@ def processFile(file):
         plotPerchingLocations2D, \
         plotTrajectories3D, loadMetadata, plotTrialStatistics, \
         plotTrajectoryProperties, plotDailyActivity]:
-        # Compute data
-        f(dir, data)
-    
+        # Due to missing data, etc., some functions occasionally fail. However, we don't want this to crash 
+        # the generation of the remaining part of the report, so catch and report any exception here
+        try:
+            # Compute data
+            f(dir, data)        
+        except Exception as e:
+            print(str(e))
+
     # Write template
     with open(outFile, 'w') as fo:
         fo.write(template.render(data).replace(u'\ufeff',u''))
@@ -372,10 +396,10 @@ def processFile(file):
 
 def run():
     # Get all raw data files in data directory
-    files = [x for x in os.listdir('./data/') if x.endswith('.msgpack')]
+    files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
         
     # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime('./data/'+x))
+    files.sort(key=lambda x: -os.path.getmtime('./'+x))
 
     #for file in ['2016-11-08 10-34-19_Cortex.msgpack','2016-11-11 12-20-41_Cortex.msgpack','2016-11-15 11-23-04_Cortex.msgpack']:
     processFile(files[0])

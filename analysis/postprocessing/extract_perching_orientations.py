@@ -4,7 +4,7 @@ import numpy as np
 import math, os, multiprocessing, warnings
 
 # Set working directory
-os.chdir(os.path.dirname(os.path.abspath(__file__)) + '/data')
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Debug switch
 DEBUG = False
@@ -95,15 +95,15 @@ def processFile(file):
                     if ((i%1000000)==0): 
                         print("Processed "+str(i)+" frames.")
 
-def run():
+def run(async=False):
     files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
 
     if DEBUG:
         processFile(files[0])
     else:
         with multiprocessing.Pool(processes=16) as pool:
-            pool.map(processFile, files)
-            pool.join()
-
+            (pool.map_async if async else pool.map)(processFile, files)
+            return pool
+    
 if __name__ == '__main__':    
     run()

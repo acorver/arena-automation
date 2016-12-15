@@ -12,7 +12,7 @@
 # --------------------------------------------------------
 
 import os, math
-from util import *
+from postprocessing.util import *
 import pandas as pd
 import numpy as np
 from scipy.stats import gaussian_kde
@@ -30,7 +30,7 @@ DBG_MAX_PROCESSED_FRAMES = 10e6
 DBG_MAX_PROCESSED_SEGM   = 10e6
 
 # Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'data'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # ========================================================
 # Fit sphere
@@ -294,7 +294,7 @@ def processFile(file):
 # Entry point
 # ========================================================
 
-def run():
+def run(async=False):
     file = '2016-11-14 14-09-32_Cortex.msgpack'
     processFile(file)
 
