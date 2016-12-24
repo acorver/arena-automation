@@ -12,12 +12,24 @@
 #             --> This takes two or three axes as argument
 #             --> Later, it will determine which axis-end combinations 
 #                 to show based on the least grid-to-camera distance to the camera
+#       - Plot all FlySim points as trajectories, to see what area was covered
+#       - Plot all frame processing delays
+#       - Compute FlySim speeds
+#       - Plot all internally computed motion trajectories after takeoff, aligned to trigger
 
 # ========================================================
 # Imports
 # ========================================================
 
-import os, gc, shutil, math, dateutil, datetime
+# Change working directory so this script can be run independently as well as as a module
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.append(os.path.join(p,'../'))
+
+# Import libraries
+import gc, shutil, math, dateutil, datetime
 from distutils import dir_util
 import numpy as np
 import pandas as pd
@@ -31,9 +43,8 @@ from jinja2 import Environment, FileSystemLoader
 from vispy import app, gloo, scene
 import vispy.visuals, vispy.scene, vispy.scene.visuals
 from vispy.color import Color
-
-# Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../data'))
+from shared import util
+import multiprocessing
 
 # ========================================================
 # Global Variables
@@ -42,12 +53,14 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../data'))
 # Change output directory
 DIR_REPORTS         = '../reports/'
 DIR_DATA            = ''
+SINGLEFILE          = ''
 OVERWRITE           = True
 SHOW_3DCANVAS       = False
 IMG_DPI             = 200
 PLOT_APPEND_BEFORE  = 25
 PLOT_APPEND_AFTER   = 200
 RENDER_SIZE_3D      = (1400, 1000)
+DEBUG               = True
 
 PLOT_TRAJECTORIES_3D_NUMFRAMES = 200
 
@@ -94,7 +107,8 @@ def getDataPerches(data):
 def plotProcessingDelays(dir, data):
     
     # Open motion log file if it exists
-    
+    with open(data['file'].replace('.msgpack','.motionlog'),'r') as fML:
+        pass
     
     # ...
     pass
@@ -146,6 +160,65 @@ def plotPerchingLocations2D(dir, data):
 
     # Free data
     gc.collect()
+
+# ========================================================
+# Helper function to create 3D plot with large amount of data
+# ========================================================
+
+def plot3D(data, groupByColumn, out, cols=['x','y','z']): 
+    
+    canvas = vispy.scene.SceneCanvas(show=SHOW_3DCANVAS, size=RENDER_SIZE_3D)
+    grid = canvas.central_widget.add_grid(spacing=10)
+    widget_1 = grid.add_widget(row=0, col=0)
+    widget_1.bgcolor = "#fff"
+    view = widget_1.add_view()
+    view.bgcolor = '#fff'
+        
+    cm = vispy.color.get_colormap('husl')
+    uniqueTrajs = np.unique(groupByColumn.as_matrix())
+        
+    for traji, traj in zip(range(len(uniqueTrajs)),uniqueTrajs):
+        c = cm[(traj%10)/10.0]
+        vispy.scene.visuals.Line(
+            pos=data[groupByColumn==traj].as_matrix(cols),
+            color=c,
+            antialias=True,
+            connect='strip',
+            parent=view.scene)
+
+        
+    # Set camera view
+    view.camera = 'turntable'
+    #view.camera.elevation = 45
+    view.camera.distance = 1000
+    view.camera.azimuth = 135
+
+    xax = scene.Axis(pos='x', view=view, tick_direction=(0, 1, 0),
+                font_size=20, axis_color='k', tick_color='k', text_color='k',
+                major_tick_length=10, minor_tick_length=5,
+                major_density = 0.2, minor_density = 0.2, 
+                parent=view.scene)
+    yax = scene.Axis(pos='y', view=view, tick_direction=(1, 0, 0),
+            font_size=20, axis_color='k', tick_color='k', text_color='k',
+            major_tick_length=10, minor_tick_length=5,
+                major_density = 0.2, minor_density = 0.2, 
+            parent=view.scene)
+    zax = scene.Axis(pos='z', view=view, tick_direction=(1, 0, 0),
+            font_size=20, axis_color='k', tick_color='k', text_color='k',
+            major_tick_length=10, minor_tick_length=5,
+                major_density = 0.2, minor_density = 0.2, 
+            parent=view.scene)
+    g = scene.AxisGrid([xax, yax, zax], parent=view.scene, minor_color='#555', 
+        major_color='#222', bg_color='#0002')
+    
+    if isinstance(out, str):
+        writer = imageio.get_writer(out)
+        writer.append_data(canvas.render())
+        writer.close()
+    
+    # Close figure in order to release memory
+    gc.collect()
+        
 
 # ========================================================
 # Plot trajectories in 3D
@@ -347,7 +420,29 @@ def plotDailyActivity(dir, data):
 # Plot all flysim poinst to indicate the range of trajectories
 # ========================================================
 
+def plotFlysim3D(dir, data):
+    
+    # Load flysim tracking data
+    fs = util.loadFlySim(data['file'])
+    
+    # Plot in 3D
+    outName = 'flysim3d_unfiltered.png'
+    plot3D(fs, fs.flysimTraj, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
+    
+    # Plot, by now filter out trials unlikely to be flysim (i.e. unrecognized)
+    outName = 'flysim3d.png'
 
+    d = fs[fs.is_flysim]
+    # TEMPORARY: FILTER OUT BY HEIGHT, THIS CONDITION IS NOW INCORPORATED INTO extract_flysim.py
+    def f(x): 
+        x['minz'] = x['flysim.z'].min(skipna=True)
+    d.groupby('flysimTraj').apply(f)
+    
+    plot3D(d, d.flysimTraj, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
+    
+    data['srcFlysim3D'] = outName
+    
+    gc.collect()
 
 # ========================================================
 # Process file
@@ -372,19 +467,24 @@ def processFile(file):
     # Initialize report data
     data = {}
     data['file'] = file
+    data['errors'] = []
     
     # Generate data
     for f in [\
-        plotPerchingLocations2D, \
+        plotFlysim3D, plotPerchingLocations2D, \
         plotTrajectories3D, loadMetadata, plotTrialStatistics, \
         plotTrajectoryProperties, plotDailyActivity]:
         # Due to missing data, etc., some functions occasionally fail. However, we don't want this to crash 
         # the generation of the remaining part of the report, so catch and report any exception here
-        try:
-            # Compute data
-            f(dir, data)        
-        except Exception as e:
-            print(str(e))
+        if DEBUG:
+            f(dir, data)
+        else:
+            try:
+                # Compute data
+                f(dir, data)        
+            except Exception as e:
+                # Log this error, so it can be displayed in the HTML report
+                data['errors'].append( str(e) )
 
     # Write template
     with open(outFile, 'w') as fo:
@@ -394,15 +494,25 @@ def processFile(file):
 # Entry point
 # ========================================================
 
-def run():
+def run(async=False):
     # Get all raw data files in data directory
     files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
         
     # Process newest files first
     files.sort(key=lambda x: -os.path.getmtime('./'+x))
 
-    #for file in ['2016-11-08 10-34-19_Cortex.msgpack','2016-11-11 12-20-41_Cortex.msgpack','2016-11-15 11-23-04_Cortex.msgpack']:
-    processFile(files[0])
-
+    if SINGLEFILE != "":
+        processFile(SINGLEFILE)
+    else:
+        if DEBUG:
+            for file in files:
+                processFile(file)
+        else:
+            with multiprocessing.Pool(processes=12) as pool:
+                (pool.map_async if async else pool.map)(processFile, files)
+                return pool
+    
+    return None
+    
 if __name__ == "__main__":
     run()

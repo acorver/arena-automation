@@ -46,7 +46,7 @@ FLYSIM_AXIS_PT1 = np.array([-400,  10])
 FLYSIM_AXIS_PT2 = np.array([ 450, -15])
 
 # Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../data'))
 
 # =======================================================================================
 # Process trajectory (either stable/perching or takeoff)
@@ -198,39 +198,6 @@ def savePerchInfo(foPerches, trajectory, frameRange, numFrames, timeRange, bound
         foPerches.flush()
 
 # =======================================================================================
-# Load FlySim tracking
-# =======================================================================================
-
-def loadFlySim(file):
-    
-    try:
-        fs         = pd.read_csv(file.replace('.msgpack','.flysim.csv'), header=None, skiprows=1)
-        fs.columns = ['flysimTraj', 'framestart', 'frameend', 'is_flysim', 'score_dir', 'score_r2', \
-            'distanceFromYframe', 'distanceFromYframeSD', 'dist_ok', 'len_ok', 'dir_ok', \
-            'std', 'stdX', 'stdY', 'stdZ']
-        fs['frame'] = fs['framestart']
-    
-        fsTracking = pd.read_csv(file.replace('.msgpack','.flysim.tracking.csv'))
-        fsTracking.columns = ['trajectory','frame','flysim.x','flysim.y','flysim.z']
-    
-        fsTracking = pd.merge(fsTracking, fs, on=['frame'], how='left')
-        fsTracking['framestart'] = fsTracking['framestart'].ffill()
-        fsTracking['frameend']   = fsTracking['frameend'].ffill()
-        fsTracking['is_flysim']  = fsTracking['is_flysim'].ffill()
-        fsTracking['flysimTraj'] = fsTracking['flysimTraj'].ffill()
-    
-        x = {}
-        for (rowid, row) in fsTracking.iterrows():
-            frame = int(row['frame'])
-            if row['is_flysim'] and row['framestart'] <= frame and \
-                frame <= row['frameend']:
-                x[frame] = (row['flysimTraj'], np.array([row['flysim.'+c] for c in ['x','y','z']]))
-        return x
-        
-    except pd.io.common.EmptyDataError as e:
-        return {}
-
-# =======================================================================================
 # Process file
 # =======================================================================================
 
@@ -252,7 +219,13 @@ def processFile(file):
 
     # Read known flysim locations
     print(dbgHeader+"Started reading flysim")
-    flysim = loadFlySim(file) 
+    fsTracking = loadFlySim(file) 
+    flysim = {}
+    for (rowid, row) in fsTracking.iterrows():
+        frame = int(row['frame'])
+        if row['is_flysim'] and row['framestart'] <= frame and \
+            frame <= row['frameend']:
+            flysim[frame] = (row['flysimTraj'], np.array([row['flysim.'+c] for c in ['x','y','z']]))
     print(dbgHeader+"Finished reading flysim")
     
     # Open trajectories

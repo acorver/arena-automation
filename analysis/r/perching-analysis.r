@@ -26,14 +26,15 @@ library(zoo)
 # == GLOBAL SETTINGS
 # ================================================================
 
-base.path <- 'Z:/people/Abel/perching-analysis/data/'
+base.path <- 'Z:/people/Abel/arena-automation/data/'
 
-wdir <- 'Z:/people/Abel/perching-analysis/'
+wdir <- 'Z:/people/Abel/arena-automation/analysis/'
 
 DEBUG <- FALSE
 
 # These groups define what data gets aggregated and plotted together
 groups = c(
+  '(2016-12-14 12-10-17)',
   '(2016-10-(26).*)',
   '(2016-10-(25|22).*)',
   '(2016-10-(21).*)',
@@ -344,6 +345,8 @@ plotTakeoffs <- function( groupIdx ) {
   
   fs$flysimTraj <- fs$trajectory
   fsTracking <- merge(fsTracking,fs, by="flysimTraj")
+  fsTracking <- fsTracking[fsTracking$is_flysim.x,]
+  fsTracking <- ddply(fsTracking, c("flysimTraj"), function(X) data.frame(X, minz=min(X$flysim.z)))
   
   fFS <- function(idx) {
     t <- fsTracking[fsTracking$flysimTraj==fsIDs[idx],]
@@ -368,13 +371,13 @@ plotTakeoffs <- function( groupIdx ) {
     #print(shapiro.test(t$flysim.y-t$my)$p.value)
     #print(shapiro.test(t$flysim.z-t$mz)$p.value)
     
-    print(sd(t$flysim.x-t$mx))
-    print(sd(t$flysim.y-t$my))
-    print(sd(t$flysim.z-t$mz))
+    #print(sd(t$flysim.x-t$mx))
+    #print(sd(t$flysim.y-t$my))
+    #print(sd(t$flysim.z-t$mz))
     
-    print(t$std)
+    #print(t$std)
     
-    print(paste0(mean(t$dstFromYframe),',',mean(t$r2)))
+    #print(paste0(mean(t$dstFromYframe),',',mean(t$r2)))
   }
   open3d();mfrow3d(1,2)
   twiddle(fFS(idx), idx = knob(c(13, length(fsIDs)),1), auto = FALSE)
