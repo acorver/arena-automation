@@ -75,6 +75,9 @@
     <ClCompile Include="motiontracker_z.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="motiontracker_zaccel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="settings.h">
@@ -120,6 +123,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="motiontracker_z.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="motiontracker_zaccel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

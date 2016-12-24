@@ -202,6 +202,7 @@
     </ClCompile>
     <ClCompile Include="motiontracker_velocity.cpp" />
     <ClCompile Include="motiontracker_z.cpp" />
+    <ClCompile Include="motiontracker_zaccel.cpp" />
     <ClCompile Include="photron.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
     </ClCompile>
@@ -235,6 +236,7 @@
     <ClInclude Include="..\lib\sqlite\sqlite3ext.h" />
     <ClInclude Include="motiontracker_velocity.h" />
     <ClInclude Include="motiontracker_z.h" />
+    <ClInclude Include="motiontracker_zaccel.h" />
     <ClInclude Include="photron.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="hardware.h" />

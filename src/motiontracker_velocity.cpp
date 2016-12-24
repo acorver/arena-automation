@@ -116,7 +116,7 @@ void motion::ProcessFrame_VelocityThreshold(CortexFrame *pCortexFrame) {
 	Body* pBody = 0;
 
 	// Skip every other frame
-	if ((frameOfData->iFrame % 2) == 0) { return; }
+	// if ((frameOfData->iFrame % 2) == 0) { return; }
 
 	//   o Add identified markers
 	for (int i = 0; i < frameOfData->nBodies; i++) {

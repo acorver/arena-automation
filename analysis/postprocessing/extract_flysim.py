@@ -87,6 +87,9 @@ def processTrajectory(trajectory, fo, foTracking):
         # Check minimum length
         isLenOK = (len(trajectory) > TRAJ_SAVE_MINLEN)
         
+        # Check minimum Z (Flysim currently never goes below ~200)
+        minz = np.nanmin(np.array(z))
+        
         # Check variance of points in each frame
         def means(c, x): 
             x['r'+c] = x[c] - np.repeat(x[c].mean(skipna=True), len(x.index))
@@ -99,13 +102,13 @@ def processTrajectory(trajectory, fo, foTracking):
         
         stds = [df['r'+c].std (skipna=True) for c in ['x','y','z']]
         ptStd = np.nansum(stds)
-
+        
         # Enforce: 
         #   o minimum trajectory length of 70 frames, 
         #   o minimum distance traveled
         #   o direction along x dimension
         
-        is_flysim = isDistOK and isLenOK and ptStd < 5.5 and dstFromYframeMean > 80
+        is_flysim = isDistOK and isLenOK and ptStd < 5.5 and dstFromYframeMean > 80 and minz >= 200
 
         if isLenOK and isDistOK:
             # Save trajectory 
@@ -116,7 +119,7 @@ def processTrajectory(trajectory, fo, foTracking):
                 np.linalg.norm(params[0:2] - np.array([0, 0.5])), 
                 R2, dstFromYframeMean, dstFromYframeSD, isDistOK, isLenOK, isDirOK, ptStd] + stds]) + '\n' )
             fo.flush()
-        
+            
             # Save the flysim trajectory
             for t in trajectory:
                 foTracking.write( ','.join([str(x) for x in [t[0], t[1], ] + t[2].tolist() ]) + '\n' )

@@ -67,7 +67,7 @@ def plotTrajectory(file, takeoffTraj, titleSuffix='', upward=True, flysim=False)
             maxFrame = max(takeoffFrame + PLOT_APPEND_AFTER, \
                 max(dataFs.frame) if len(dataFs.index)>0 else max(dataDf.frame))
             maxFrame = int(minFrame + int(maxFrame-minFrame) * t / 200)
-                                    
+            
             # Clear the drawings in this subplot
             ax1.cla()
             

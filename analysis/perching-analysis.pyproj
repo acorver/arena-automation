@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{76b3e4b1-9cd1-4076-a48b-7f13f62bc0b8}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>postprocessing\plot_takeoffs.py</StartupFile>
+    <StartupFile>df_reports\generate_reports.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -30,7 +30,7 @@
     <Compile Include="postprocessing\create_highspeed_links.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="postprocessing\util.py">
+    <Compile Include="shared\util.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="postprocessing\__init__.py">
@@ -61,11 +61,15 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="postprocessing\plot_takeoffs.py" />
+    <Compile Include="__init__.py">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="df_reports\" />
     <Folder Include="df_reports\templates\" />
     <Folder Include="df_reports\templates\static\" />
+    <Folder Include="shared\" />
     <Folder Include="postprocessing\" />
   </ItemGroup>
   <ItemGroup>

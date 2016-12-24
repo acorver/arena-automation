@@ -5,7 +5,7 @@ library(plyr)
 library(twiddler)
 
 
-setwd('Z:/people/Abel/perching-analysis/')
+setwd('Z:/people/Abel/arena-automation/')
 
 # TODO: Read all points, then plot, to make sure line is recognized...
 all <- fread('data/flysim.dbg.csv',sep=',')
@@ -46,17 +46,17 @@ twiddle(
 # 
 readFlySim <- function(fname) {
   data <- fread(fname,sep=',')
-  colnames(data) <- c('p1','p2','p3','score','dist','len','trajectory','frame','x','y','z')
+  #colnames(data) <- c('p1','p2','p3','score','dist','len','trajectory','frame','x','y','z')
   data <- as.data.frame(data)
   data$trajectory <- as.numeric(data$trajectory)
-  data$frame <- as.numeric(data$frame)
+  data$framestart <- as.numeric(data$framestart)
   data$x <- as.numeric(data$x)
   data$y <- as.numeric(data$y)
   data$z <- as.numeric(data$z)
   return(data)  
 }
 
-flysim <- readFlySim('data/2016-11-11 12-20-41_Cortex.flysim.csv')
+flysim <- readFlySim('data/2016-12-14 12-10-17.flysim.csv')
 #flysim <- readFlySim('data/2016-11-11 12-20-41_Cortex.flysim.2.csv')
 #flysim <- readFlySim('data/flysim.csv')
 flysim.original <- flysim
