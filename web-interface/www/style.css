@@ -12,7 +12,9 @@ html, body {
     position: absolute;
     left: 300px;
     top: 0;
-    padding: 20px;  
+    padding: 0;
+    bottom: 0;
+    right: 0;
 }
 
 #container-log {
@@ -45,6 +47,38 @@ html, body {
     height: 700px;
     margin: 20px;
     background: #f8f8f8;
+}
+
+/* ------------------------------------------------ */
+
+.label {
+    width:100px;
+    height:20px;
+    text-align: center;
+}
+
+a {
+    color: #000000;
+}
+
+#top {
+    position: absolute;
+    top:0;
+    left:0;
+    z-index: 10000000;
+    padding:10px;
+}
+
+#cableFlysimCanvas {
+    position: absolute;
+    top: 0; right: 0; left: 0; bottom: 0;
+    cursor: pointer;
+    z-index: 0;
+    min-width: 500px;
+    min-height: 500px;
+}
+canvas{
+    z-index: 0;
 }
 
 /* ------------------------------------------------ */

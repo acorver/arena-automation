@@ -46,7 +46,7 @@ var processPowerCmd = function(relay, cmd, res) {
                             clearTimeout(timer); callback();
                         });
                     } else {
-                        port.write(cmd, function(){
+                        port.write(cmd + '\n', function(){
                             port.drain();
                         });
                     }
@@ -88,15 +88,63 @@ app.get('/api/power/:relayid/:cmd', function(req, res){
  * Process CableFlysim command
  * ============================================================================ */
 
+var processCableFlysimCmd = function(cmd, res) {
+
+    queue.push(function(callback){
+        try{
+            console.log(devicePorts["CABLEFLYSIM"]);
+            var port = new serialport( devicePorts["CABLEFLYSIM"], {
+                baudrate: 9600,
+                parser: serialport.parsers.readline("\n")
+            }, openCallback=function(err) {
+                if (err) {
+                    if (res) { res.send("{\"status\": \"error\", \"response\": \"\"}"); }
+                    console.log("Error in port "+devicePorts[relay]+": "+err);
+                    port.close(function(err){
+                        clearTimeout(timer); callback();
+                    });
+                } else {
+                    port.write(cmd + '\n', function(){
+                        port.drain();
+                    });
+                }
+            } );
+
+            port.on('data', function (data) {
+                if (res) { res.send("{\"status\": \"ok\", \"response\": \""+
+                    data.trim().replace(/"/g, '\\"')+"\"}"); }
+                port.close(function(err){
+                    clearTimeout(timer);callback();
+                });
+            });
+
+            /* Register data handler */
+            var timer = setTimeout(function(){
+                port.close(function(err){
+                    if (res) { res.send("{\"status\": \"timeout\", \"response\": \"\"}"); }
+                    callback();
+                });
+            }, 3000);
+        } catch (err) {
+            callback();
+        }
+    });
+
+    queue.start(function(err) {});
+};
+
 /* Custom handler for communicating with CableFlysim */
 app.get('/api/cableflysim/:cmd', function(req, res){
 
     var cmd = req.params.cmd;
+
+    console.log("received cableflysim cmd: "+cmd);
+
     processCableFlysimCmd(cmd, res);
 });
 
 /* ============================================================================
- * Initialize COM/USB ports 
+ * Initialize COM/USB ports
  * ============================================================================ */
 
 /* Try connecting to a port */
@@ -129,7 +177,7 @@ var fInit = function() {
                 } else {
                     console.log("Successfully opened serial port.");
 
-                    port.write('h', function(){
+                    port.write('h\n', function(){
                         port.drain(function(){});
                     });
                 }
@@ -151,11 +199,13 @@ var fInit = function() {
 
             /* Try next port */
             setTimeout(function(){
-              console.log("Port timed out. Closing port and moving on...")
+              if (port.isOpen) {
+                console.log("Port timed out. Closing port and moving on...")
+              }
               port.close(function(){
                 tryPort(i+1, callback);
               });
-            }, 1500);
+            }, 750);
         };
         tryPort(0, function(){
 
@@ -177,4 +227,5 @@ fInit();
 // TODO: Add button/status message indicating whether app is running / recording, e.g. by pinging it every few seconds.
 // Add button to launch application (at least if it's not already running, o/w relaunch)
 
+console.log("Listening on port 80...");
 app.listen(80)
