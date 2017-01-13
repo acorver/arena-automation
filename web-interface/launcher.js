@@ -23,9 +23,12 @@ queue.on('timeout', function(next, job) {
 /* Serve static web interface content */
 app.use(serveStatic('www', {'index': ['index.html']}));
 
-/* Process command */
+/* ============================================================================
+ * Process power command
+ * ============================================================================ */
+
 var processPowerCmd = function(relay, cmd, res) {
-    
+
     queue.push(function(callback){
         if (!(relay in devicePorts)) {
             res.send("Device ID not recognized.");
@@ -48,7 +51,7 @@ var processPowerCmd = function(relay, cmd, res) {
                         });
                     }
                 } );
-                
+
                 /* Register data handler */
                 var timer = setTimeout(function(){
                     port.close(function(err){
@@ -69,7 +72,7 @@ var processPowerCmd = function(relay, cmd, res) {
             }
         }
     });
-    
+
     queue.start(function(err) {});
 }
 
@@ -78,18 +81,40 @@ app.get('/api/power/:relayid/:cmd', function(req, res){
 
     var relay = req.params.relayid;
     var cmd = req.params.cmd;
-    processPowerCmd(relay, cmd, res);        
+    processPowerCmd(relay, cmd, res);
 });
+
+/* ============================================================================
+ * Process CableFlysim command
+ * ============================================================================ */
+
+/* Custom handler for communicating with CableFlysim */
+app.get('/api/cableflysim/:cmd', function(req, res){
+
+    var cmd = req.params.cmd;
+    processCableFlysimCmd(cmd, res);
+});
+
+/* ============================================================================
+ * Initialize COM/USB ports 
+ * ============================================================================ */
 
 /* Try connecting to a port */
 var fInit = function() {
     console.log("Searching COM ports for power relay interfaces.");
     serialport.list(function (err, ports) {
+
+        console.log("Found "+ports.length+" ports: ");
+        for (var a=0;a<ports.length;a++) {
+          console.log("  "+ports[a].comName);
+        }
+
         var tryPort = function(i, callback) {
             /* Have we processed all available ports? */
-            if (i >= ports.length) { 
+            if (i >= ports.length) {
+                console.log("Reached port number "+i);
                 callback();
-                return; 
+                return;
             }
 
             console.log("Trying port "+i+" ("+JSON.stringify(ports[i].comName)+")");
@@ -101,37 +126,45 @@ var fInit = function() {
             }, openCallback = function(err){
                 if (err) {
                     console.log("Error connecting to port "+ports[i].comName+": "+err);
-                    tryPort(i+1, callback); 
                 } else {
                     console.log("Successfully opened serial port.");
-                    
+
                     port.write('h', function(){
                         port.drain(function(){});
                     });
                 }
             } );
-            
+
             /* Register data handler */
             port.on('data', function (data) {
                 console.log("Received response from port "+i+": "+data);
                 if ( data.indexOf('Power Relay Controller ') !== -1 ) {
-                    /* Use this port for our communications */
-                    idx = data.substring('Power Relay Controller '.length).trim()
+                    /* Save this port */
+                    idx = 'POWER_RELAY_' + data.substring('Power Relay Controller '.length).trim()
                     devicePorts[idx] = ports[i].comName;
+                } else if ( data.indexOf('CableFlysim Controller') !== -1 ) {
+                    devicePorts['CABLEFLYSIM'] = ports[i].comName;
                 }
                 console.log(JSON.stringify(devicePorts));
-                port.close()
+                port.close(function(){});
             });
-            
-            
+
             /* Try next port */
-            setTimeout(function(){tryPort(i+1, callback)}, 5000);
+            setTimeout(function(){
+              console.log("Port timed out. Closing port and moving on...")
+              port.close(function(){
+                tryPort(i+1, callback);
+              });
+            }, 1500);
         };
-        tryPort(1, function(){
+        tryPort(0, function(){
+
+            console.log("Finished port discovery...");
+
             /* After having initialized our list of ports, re-synchronize the clocks */
             /* This makes sure alarms go off at the right time */
             for (portID in devicePorts) {
-                var cmdSync = "t" + Math.floor(new Date() / 1000);  
+                var cmdSync = "t" + Math.floor(new Date() / 1000);
                 processPowerCmd(portID, cmdSync, null);
             }
         });
