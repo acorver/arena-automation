@@ -91,17 +91,90 @@ arenaApp.controller('flysimController', function($scope, $rootScope, $http) {
 
 /* ======================================================================================
    CableFlysim Controller
-   
-   Visualization code largely based on code by Sue Lockwood, code at:
-      <https://github.com/deathbearbrown/learning-three-js-blogpost/>
-   
-   For more 3D shapes, see: 
-     o https://stemkoski.github.io/Three.js/Shapes.html
-     o view-source:https://stemkoski.github.io/Three.js/Shapes.html
-     
 ====================================================================================== */
 
 arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http) {
+
+    $scope.cableflysimStatus = null;
+
+    // Periodically request info from flysim
+    var checkCableFlysim = function(){
+        $.getJSON("/api/cableflysim/status", function(data){
+            
+            // --------------------------------------------------------------------
+            // Parse the message received from the microprocessor
+            // --------------------------------------------------------------------
+            
+            try {
+                $scope.cableflysimStatus = JSON.parse(data.response);
+            } catch(err) {}
+            
+            $scope.cableflysimStatus.motorPositions = [
+                [0,0,0],
+                [500,0,0],
+                [-1000,0,0],
+                [1000,0,0],
+                [0,0,-100],
+                [500,0,-100],
+                [-1000,0,-100],
+                [1000,0,-100],
+                [0,0,800],
+                [500,0,800],
+                [-1000,0,800],
+                [1000,0,800]
+            ];
+
+            // --------------------------------------------------------------------
+            // Update motor locations
+            // --------------------------------------------------------------------
+            
+            if ( $scope.webglMotors == null ) {
+                
+                $scope.webglMotors = [];
+                
+                var darkMaterial = new THREE.MeshBasicMaterial( { color: 0xffffcc } );
+                var wireframeMaterial = new THREE.MeshBasicMaterial( { color: 0x000000, wireframe: true, transparent: true } ); 
+                var multiMaterial = [ darkMaterial, wireframeMaterial ]; 
+
+                for (var i = 0; i < $scope.cableflysimStatus.motorPositions.length; i++) {
+                    var shape = THREE.SceneUtils.createMultiMaterialObject( 
+                        new THREE.OctahedronGeometry( 40, 1 ), 
+                        multiMaterial );
+
+                    function rint(min,max)
+                        { return Math.floor(Math.random()*(max-min+1)+min); }
+                    
+                    var p = $scope.cableflysimStatus.motorPositions[i];
+                    shape.position.set(p[0], p[2], p[1]); // The Y/Z convention is flipped
+                    $scope.webglMotors.push( shape );
+                    glScene.add( shape );
+                }
+            }
+
+            for (var i = 0; i < $scope.cableflysimStatus.motorPositions.length; i++) {
+                //$scope.webglMotors[i].position.set( $scope.cableflysimStatus.motorPositions[i] );
+            }
+
+            // --------------------------------------------------------------------
+            // Continue to periodically update the state
+            // --------------------------------------------------------------------
+            
+            setTimeout(function(){
+                checkCableFlysim();
+            }, 1000);
+        });
+    };
+    
+    // ----------------------------------------------------------------------------
+    // Create 3D visualization
+    //
+    // Visualization code largely based on code by Sue Lockwood, code at:
+    //    <https://github.com/deathbearbrown/learning-three-js-blogpost/>
+    // 
+    // For more 3D shapes, see: 
+    //   o https://stemkoski.github.io/Three.js/Shapes.html
+    //   o view-source:https://stemkoski.github.io/Three.js/Shapes.html
+    // ----------------------------------------------------------------------------
 
     if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
@@ -115,47 +188,35 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
     
     var windowWidth  = $("#cableFlysimCanvas").innerWidth();
     var windowHeight = $("#cableFlysimCanvas").innerHeight();
-    
-    var data = {
-    labels: {
-        y: ["2%", "4%", "6%", "8%"],
-        x: ['', "\'14","\'13","\'12","\'11","\'10","\'09","\'08","\'07","\'06","\'05"],
-        z: ["1-month","3-month","6-month","1-year","2-year","3-year","5-year","7-year","10-year", "20-year","30-year"]
+
+    var graphBounds = {
+        xmin: -1000,
+        xmax:  1000,
+        ymin: -1000,
+        ymax:  1000,
+        zmin:  -100,
+        zmax:   800
     }
-    };
+    var tickstepsize = 100;
 
-    $.getJSON( "./js/2005-2015.json", function( data ) {
-        realData = data;
-        init();
-        render();
-    });
+    function labelAxis(direction){
 
-    var graphDimensions = {
-        w:1000,
-        d:2405,
-        h:800
-    };
-
-    function labelAxis(width, data, direction){
-
-        var separator = 2*width/data.length,
-        p = {
-            x:0,
-            y:0,
-            z:0
-        }, dobj = new THREE.Object3D();
+        p = { x: (direction=='x'?graphBounds.xmin:0), 
+              y: (direction=='y'?graphBounds.ymin:0), 
+              z: (direction=='z'?graphBounds.zmin:0) };
         
-        for ( var i = 0; i < data.length; i ++ ) {
-            var label = makeTextSprite(data[i]);
+        x0 = (direction=='x'?graphBounds.xmin:(direction=='y'?
+            graphBounds.ymin:graphBounds.zmin))
+        x1 = (direction=='x'?graphBounds.xmax:(direction=='y'?
+            graphBounds.ymax:graphBounds.zmax))
 
-            label.position.set(p.x,p.y,p.z);
-
+        dobj = new THREE.Object3D();
+        
+        for ( var i = x0; i < x1; i += tickstepsize ) {
+            p[direction] = i;
+            var label = makeTextSprite(direction + "=" + i);
+            label.position.set(p.x,p.z,p.y);
             dobj.add( label );
-            if (direction=="y"){
-                p[direction]+=separator;
-            } else {
-                p[direction]-=separator;
-            }
         }
         return dobj;
     }
@@ -175,16 +236,15 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
         // get size data (height depends only on font size)
         var metrics = context.measureText( message );
         var textWidth = metrics.width;
-
-
+        
         // text color
         context.fillStyle = "rgba(0, 0, 0, 1.0)";
         context.fillText( message, 0, fontsize);
 
         // canvas contents will be used for a texture
-        var texture = new THREE.Texture(canvas)
-                texture.minFilter = THREE.LinearFilter;
-                texture.needsUpdate = true;
+        var texture = new THREE.Texture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        texture.needsUpdate = true;
 
         var spriteMaterial = new THREE.SpriteMaterial({ map: texture, useScreenCoordinates: false});
         var sprite = new THREE.Sprite( spriteMaterial );
@@ -194,47 +254,34 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
 
     // ----------------------------------------------------------------------------
     //  createAGrid
-    //
-    // opts
-    // {
-    // 	height: width,
-    // 	width: depth,
-    // 	linesHeight: b,
-    // 	linesWidth: c,
-    // 	color: 0xcccccc
+    //     opts {
+    // 	     height: width, width: depth, linesHeight: b, linesWidth: c, color: 0xcccccc 
     // }
-    //
     // ----------------------------------------------------------------------------
     
     function createAGrid(opts){
         var config = opts || {
-            height: 500,
-            width: 500,
-            linesHeight: 10,
-            linesWidth: 10,
             color: 0xDD006C
         };
 
         var material = new THREE.LineBasicMaterial({
             color: config.color,
-            opacity: 0.2
+            opacity: 0.9
         });
 
         var gridObject = new THREE.Object3D(),
-                gridGeo= new THREE.Geometry(),
-                stepw = 2*config.width/config.linesWidth,
-                steph = 2*config.height/config.linesHeight;
+                gridGeo= new THREE.Geometry();
 
-        //width
-        for ( var i = - config.width; i <= config.width; i += stepw ) {
-                gridGeo.vertices.push( new THREE.Vector3( - config.height, i,0 ) );
-                gridGeo.vertices.push( new THREE.Vector3(  config.height, i,0 ) );
-
+        // lines along x
+        for ( var i = config.ymin; i <= config.ymax; i += tickstepsize ) {
+            gridGeo.vertices.push( new THREE.Vector3( config.xmin, i, 0 ) );
+            gridGeo.vertices.push( new THREE.Vector3( config.xmax, i, 0 ) );
         }
-        //height
-        for ( var i = - config.height; i <= config.height; i += steph ) {
-                gridGeo.vertices.push( new THREE.Vector3( i,- config.width,0 ) );
-                gridGeo.vertices.push( new THREE.Vector3( i, config.width, 0 ) );
+
+        // lines along y
+        for ( var i = config.xmin; i <= config.xmax; i += tickstepsize ) {
+            gridGeo.vertices.push( new THREE.Vector3( i, config.ymin, 0 ) );
+            gridGeo.vertices.push( new THREE.Vector3( i, config.ymax, 0 ) );
         }
 
         var line = new THREE.Line( gridGeo, material, THREE.LinePieces );
@@ -249,70 +296,63 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
 
     function gridInit(){
 
-        var boundingGrid = new THREE.Object3D(),
-            depth = graphDimensions.w/2, //depth
-            width = graphDimensions.d/2, //width
-            height = graphDimensions.h/2, //height
-            a =data.labels.y.length,
-            b= data.labels.x.length,
-            c= data.labels.z.length;
-
+        var boundingGrid = new THREE.Object3D();
+        
         //pink
-        var newGridXY = createAGrid({
-            height: width,
-            width: height,
-            linesHeight: b,
-            linesWidth: a,
+        var newGridXZ = createAGrid({
+            xmin: graphBounds.xmin, 
+            xmax: graphBounds.xmax, 
+            ymin: graphBounds.zmin, 
+            ymax: graphBounds.zmax,
             color: 0xcccccc
         });
-        newGridXY.position.z = -depth;
-        boundingGrid.add(newGridXY);
+        newGridXZ.position.z = graphBounds.ymin;
+        boundingGrid.add(newGridXZ);
 
         //blue
         var newGridYZ = createAGrid({
-            height: width,
-            width: depth,
-            linesHeight: b,
-            linesWidth: c,
+            xmin: graphBounds.ymin, 
+            xmax: graphBounds.ymax, 
+            ymin: graphBounds.xmin, 
+            ymax: graphBounds.xmax,
             color: 0xcccccc
         });
         newGridYZ.rotation.x = Math.PI/2;
-        newGridYZ.position.y = -height;
+        newGridYZ.position.y = graphBounds.zmin;
         boundingGrid.add(newGridYZ);
 
         //green
-        var newGridXZ = createAGrid({
-            height: depth,
-            width: height,
-            linesHeight:c,
-            linesWidth: a,
+        var newGridXY = createAGrid({
+            xmin: graphBounds.ymin, 
+            xmax: graphBounds.ymax, 
+            ymin: graphBounds.zmin, 
+            ymax: graphBounds.zmax,
             color: 0xcccccc
         });
 
-        newGridXZ.position.x = width;
-        //newGridXZ.position.y = height;
-        newGridXZ.rotation.y = Math.PI/2;
-        boundingGrid.add(newGridXZ);
+        newGridXY.position.x = graphBounds.ymin;
+        newGridXY.rotation.y = Math.PI/2;
+        boundingGrid.add(newGridXY);
 
         glScene.add(boundingGrid);
+        
+        var labelsW = labelAxis("x");
+        labelsW.position.x = 0;
+        labelsW.position.y = 0;
+        labelsW.position.z = 0; //graphBounds.zmin;
+        glScene.add(labelsW);
 
-        var labelsW = labelAxis(width, data.labels.x,"x");
-                labelsW.position.x = width+40;
-                labelsW.position.y = -height -40;
-                labelsW.position.z = depth;
-                glScene.add(labelsW);
-
-        var labelsH = labelAxis(height, data.labels.y,"y");
-                labelsH.position.x = width;
-                labelsH.position.y = - height +(2*height/a)-20;
-                labelsH.position.z = depth;
-                glScene.add(labelsH);
-
-        var labelsD = labelAxis(depth, data.labels.z, "z");
-                labelsD.position.x = width;
-                labelsD.position.y = -(height)-40;
-                labelsD.position.z = depth-40;
-                glScene.add(labelsD);
+        var labelsH = labelAxis("y");
+        labelsH.position.x = 0;
+        labelsH.position.y = 0; //graphBounds.zmax;
+        labelsH.position.z = 0;
+        glScene.add(labelsH);
+        
+        var labelsD = labelAxis("z");
+        labelsD.position.x = 0;
+        labelsD.position.y = 0;
+        labelsD.position.z = 0;
+        glScene.add(labelsD);
     };
 
     function init() {
@@ -354,95 +394,12 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
         canvas.height = 128;
 
         var context = canvas.getContext( '2d' );
-        
-        // ----------------------------------------------------------------------------
-        //    add motor locations
-        // ----------------------------------------------------------------------------
-        
-        var darkMaterial = new THREE.MeshBasicMaterial( { color: 0xffffcc } );
-        var wireframeMaterial = new THREE.MeshBasicMaterial( { color: 0x000000, wireframe: true, transparent: true } ); 
-        var multiMaterial = [ darkMaterial, wireframeMaterial ]; 
-
-        var shape = THREE.SceneUtils.createMultiMaterialObject( 
-            new THREE.OctahedronGeometry( 40, 1 ), 
-            multiMaterial );
-        shape.position.set(0, 50, 0);
-        glScene.add( shape );
 
         // ----------------------------------------------------------------------------
         //    data
         // ----------------------------------------------------------------------------
         
         gridInit();
-
-        var wireframeMaterial = new THREE.MeshBasicMaterial( {
-            side:THREE.DoubleSide,
-            vertexColors: THREE.VertexColors
-        });
-
-        var lineMat = new THREE.LineBasicMaterial({
-            color: 0xffffff
-        });
-
-        var blacklineMat = new THREE.LineBasicMaterial({
-            color: 0x000000
-        });
-
-        var floorGeometry = new THREE.PlaneGeometry(graphDimensions.w,graphDimensions.d,10,2405);
-        var colors = ["#eef4f8","#ddecf4","#cce5f0","#bcddec","#aed5e7","#a0cde2","#94c5dc","#89bcd6","#7eb4d0","#74abc9","#6aa2c2","#619abb","#5892b4","#4f8aad","#4781a6","#3f799f","#3a7195","#35688c","#326082","#2f5877","#2c506c","#243d52"];
-        var faceColors = [];
-        var lines={};
-
-        // on plane Geometry, change the z value to create the 3D area surface
-        // just like when creating a terrain
-        for (var i =0; i< floorGeometry.vertices.length; i++){
-
-            //push colors to the faceColors array
-            faceColors.push(colors[Math.round(realData[i][2]*4)]);
-
-            if (realData[i][2] == null){
-                //hack hack hack
-                floorGeometry.vertices[i].z="null";
-            }else{
-                floorGeometry.vertices[i].z=realData[i][2]*100;
-                if (!lines[floorGeometry.vertices[i].x]) {
-                    lines[floorGeometry.vertices[i].x] = new THREE.Geometry();
-                }
-                //arrays for the grid lines
-                lines[floorGeometry.vertices[i].x].vertices.push(new THREE.Vector3(floorGeometry.vertices[i].x, floorGeometry.vertices[i].y, realData[i][2]*100));
-            }
-        }
-
-        //vertexColors
-        for (var x= 0; x <floorGeometry.faces.length; x++){
-            floorGeometry.faces[x].vertexColors[0] = new THREE.Color(faceColors[floorGeometry.faces[x].a]);
-            floorGeometry.faces[x].vertexColors[1] = new THREE.Color(faceColors[floorGeometry.faces[x].b]);
-            floorGeometry.faces[x].vertexColors[2] = new THREE.Color(faceColors[floorGeometry.faces[x].c]);
-        }
-
-        //grid lines
-        for (line in lines){
-            if (line == "-500"){
-                var graphLine= new THREE.Line(lines[line], blacklineMat);
-            }else{
-                var graphLine = new THREE.Line(lines[line], lineMat);
-            }
-
-            graphLine.rotation.x = -Math.PI/2;
-            graphLine.position.y = -graphDimensions.h/2;
-
-            graphLine.rotation.z = Math.PI/2;
-
-            //glScene.add(graphLine);
-        }
-
-
-        var floor = new THREE.Mesh(floorGeometry, wireframeMaterial);
-        floor.rotation.x = -Math.PI/2;
-        floor.position.y = -graphDimensions.h/2;
-
-        floor.rotation.z = Math.PI/2;
-        //glScene.add(floor);
 
         // ----------------------------------------------------------------------------
         //    SET UP RENDERERS
@@ -458,6 +415,12 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
         // set up window resize listener
         window.addEventListener( 'resize', onWindowResize, false );
         animate();
+        
+        // ----------------------------------------------------------------------------
+        // Start update loop
+        // ----------------------------------------------------------------------------
+        
+        checkCableFlysim();
     }
 
     // ----------------------------------------------------------------------------
@@ -472,8 +435,6 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
     function render() {
         camera.lookAt( glScene.position );
         glRenderer.render( glScene, camera );
-    stats.update();
-
     }
 
     // ----------------------------------------------------------------------------
@@ -489,6 +450,9 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
         render();
 
     }
+
+    // Initialize
+    init();
 });
 
 /* ======================================================================================
