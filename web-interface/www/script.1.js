@@ -90,17 +90,12 @@ arenaApp.controller('flysimController', function($scope, $rootScope, $http) {
 arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http) {
 
     $scope.cableflysimStatus = null;
-    $scope.cableFlysimLog = [];
+    $scope.cableFlysimLog = "";
     $scope.strSerialCmd = "";
 
     // Register handler for serial communication
     $scope.doCableFlysimSerialReq = function(){
-        
-        $.getJSON("/api/cableflysim/"+$scope.strSerialCmd, function(data){
-            if (data.response != undefined) {
-                $scope.cableFlysimLog.push(data.response);
-            }
-        });
+        alert($scope.strSerialCmd);
     };
 
     // Periodically request info from flysim
@@ -454,7 +449,6 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
 
     // Initialize
     init();
-    render();
 });
 
 /* ======================================================================================

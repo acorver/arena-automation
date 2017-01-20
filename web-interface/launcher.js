@@ -99,7 +99,7 @@ var processCableFlysimCmd = function(cmd, res) {
             }, openCallback=function(err) {
                 if (err) {
                     if (res) { res.send("{\"status\": \"error\", \"response\": \"\"}"); }
-                    console.log("Error in port "+devicePorts[relay]+": "+err);
+                    console.log("Error in CableFlysim port "+devicePorts["CABLEFLYSIM"]+": "+err);
                     port.close(function(err){
                         clearTimeout(timer); callback();
                     });

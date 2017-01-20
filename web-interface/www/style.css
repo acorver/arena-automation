@@ -6,6 +6,7 @@
 html, body {
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
 
 #main {
@@ -64,14 +65,37 @@ a {
 #top {
     position: absolute;
     top:0;
-    left:0;
+    left:30%;
     z-index: 10000000;
     padding:10px;
 }
 
+#cableFlysimSerialWnd {
+    position: absolute;
+    top: 0; right: 70%; left: 0; bottom: 0;
+    background: #f0f0f0;
+    padding: 20px;
+}
+#cableFlysimSerialWnd input {
+    width: 100%;
+}
+#cableFlysimSerialWnd .log-window {
+    position: absolute;
+    top: 120px;
+    left: 30px;
+    right: 30px;
+    bottom: 20px;
+    background: #fff;
+    overflow: auto;
+}
+#cableFlysimSerialWnd .log-window span {
+    display: block;
+    margin: 10px;
+}
+
 #cableFlysimCanvas {
     position: absolute;
-    top: 0; right: 0; left: 0; bottom: 0;
+    top: 0; right: 0; left: 30%; bottom: 0;
     cursor: pointer;
     z-index: 0;
     min-width: 500px;

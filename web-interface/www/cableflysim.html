@@ -1,4 +1,28 @@
 
+<div id="cableFlysimSerialWnd">
+    
+    <p>
+        Type a command in the field below, and press enter, to send a command to the CableFlysim 
+        microcontroller.
+    </p>
+
+    <div class="input-group">
+        <span class="input-group-btn">
+            <button class="btn btn-primary" type="button" data-trigger="click" 
+                ng-click="doCableFlysimSerialReq()">Send Command</button>
+        </span>
+        <input type="text" class="form-control" ng-model="strSerialCmd" 
+            placeholder="Serial command here..."  
+            ng-keypress="($event.which===13)?doCableFlysimSerialReq():0">
+    </div>
+    
+    <div class="log-window">
+        <span ng-repeat="x in cableFlysimLog track by $index">
+            {{x}}
+        </span>
+    </div>
+
+</div>
 
 <div id="cableFlysimCanvas"></div>
 
