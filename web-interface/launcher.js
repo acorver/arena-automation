@@ -104,7 +104,9 @@ var processCableFlysimCmd = function(cmd, res) {
                         clearTimeout(timer); callback();
                     });
                 } else {
-                    port.write(cmd + '\n', function(){
+                    var cmdp = cmd.replace('%20',' ') + '\n';
+                    console.log("Sending CableFlysim Command: " + cmdp);
+                    port.write(cmdp, function(){
                         port.drain();
                     });
                 }
@@ -205,7 +207,7 @@ var fInit = function() {
               port.close(function(){
                 tryPort(i+1, callback);
               });
-            }, 750);
+            }, 1000 )// 750);
         };
         tryPort(0, function(){
 

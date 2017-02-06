@@ -72,7 +72,7 @@ a {
 
 #cableFlysimSerialWnd {
     position: absolute;
-    top: 0; right: 70%; left: 0; bottom: 0;
+    top: 0; right: 75%; left: 0; bottom: 0;
     background: #f0f0f0;
     padding: 20px;
 }
@@ -95,12 +95,24 @@ a {
 
 #cableFlysimCanvas {
     position: absolute;
-    top: 0; right: 0; left: 30%; bottom: 0;
-    cursor: pointer;
-    z-index: 0;
-    min-width: 500px;
-    min-height: 500px;
+    top: 0; right: 0; left: 25%; bottom: 0;
 }
+#cableFlysimCanvasXY {
+    position: absolute;
+    height: 400px; width: 25%; left: 25%; bottom: 0;
+    background: #f0f0f0;
+}
+#cableFlysimCanvasXZ {
+    position: absolute;
+    height: 400px; width: 25%; left: 50%; bottom: 0;
+    background: #f0f0f0;
+}
+#cableFlysimCanvasYZ {
+    position: absolute;
+    height: 400px; width: 25%; left: 75%; bottom: 0;
+    background: #f0f0f0;
+}
+
 canvas{
     z-index: 0;
 }

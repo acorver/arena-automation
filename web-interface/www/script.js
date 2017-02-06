@@ -105,7 +105,7 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
 
     // Periodically request info from flysim
     var checkCableFlysim = function(){
-        $.getJSON("/api/cableflysim/status", function(data){
+        $.getJSON("/api/cableflysim/status +waypoints", function(data){
             
             // --------------------------------------------------------------------
             // Parse the message received from the microprocessor
@@ -115,6 +115,7 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
                 $scope.cableflysimStatus = JSON.parse(data.response);
             } catch(err) {}
             
+            /*
             $scope.cableflysimStatus.motorPositions = [
                 [0,0,0],
                 [500,0,0],
@@ -129,6 +130,7 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
                 [-1000,0,800],
                 [1000,0,800]
             ];
+            */
 
             // --------------------------------------------------------------------
             // Update motor locations
@@ -142,23 +144,57 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
                 var wireframeMaterial = new THREE.MeshBasicMaterial( { color: 0x000000, wireframe: true, transparent: true } ); 
                 var multiMaterial = [ darkMaterial, wireframeMaterial ]; 
 
-                for (var i = 0; i < $scope.cableflysimStatus.motorPositions.length; i++) {
+                for (var i = 0; i < $scope.cableflysimStatus.motorPositionsXYZ.length; i++) {
                     var shape = THREE.SceneUtils.createMultiMaterialObject( 
                         new THREE.OctahedronGeometry( 40, 1 ), 
                         multiMaterial );
-
+                    
                     function rint(min,max)
                         { return Math.floor(Math.random()*(max-min+1)+min); }
                     
-                    var p = $scope.cableflysimStatus.motorPositions[i];
+                    var p = $scope.cableflysimStatus.motorPositionsXYZ[i];
                     shape.position.set(p[0], p[2], p[1]); // The Y/Z convention is flipped
                     $scope.webglMotors.push( shape );
                     glScene.add( shape );
                 }
             }
 
-            for (var i = 0; i < $scope.cableflysimStatus.motorPositions.length; i++) {
-                //$scope.webglMotors[i].position.set( $scope.cableflysimStatus.motorPositions[i] );
+            for (var i = 0; i < $scope.cableflysimStatus.motorPositionsXYZ.length; i++) {
+                var p = $scope.cableflysimStatus.motorPositionsXYZ[i];
+                $scope.webglMotors[i].position.set( p[0], p[2], p[1] );
+            }
+
+            // --------------------------------------------------------------------
+            // Update waypoint locations
+            // --------------------------------------------------------------------
+
+            if ($scope.cableflysimStatus.waypoints != null) {
+                
+                if ( $scope.webglWaypoints == null ) {
+                
+                $scope.webglWaypoints = [];
+                
+                var darkMaterial = new THREE.MeshBasicMaterial( { color: 0xaaaaff } );
+                var wireframeMaterial = new THREE.MeshBasicMaterial( { color: 0x000000, wireframe: true, transparent: true } ); 
+                var multiMaterial = [ darkMaterial, wireframeMaterial ]; 
+
+                for (var i = 0; i < $scope.cableflysimStatus.waypoints.length; i++) {
+                    
+                    var shape = THREE.SceneUtils.createMultiMaterialObject( 
+                        new THREE.OctahedronGeometry( 1, 1 ), 
+                        multiMaterial );
+                    
+                    var p = $scope.cableflysimStatus.waypoints[i];
+                    shape.position.set(p[0], p[2], p[1]); // The Y/Z convention is flipped
+                    $scope.webglWaypoints.push( shape );
+                    glScene.add( shape );
+                }
+                }
+
+                for (var i = 0; i < $scope.cableflysimStatus.waypoints.length; i++) {
+                    var p = $scope.cableflysimStatus.waypoints[i];
+                    $scope.webglWaypoints[i].position.set( p[0], p[2], p[1] );
+                }
             }
 
             // --------------------------------------------------------------------
@@ -205,6 +241,40 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
     }
     var tickstepsize = 100;
 
+    var views = [ {
+        left: 0,
+        bottom: 0.3,
+        width: 1.0,
+        height: 0.7,
+        background: new THREE.Color().setRGB( 0.95, 0.95, 0.95 ),
+        eye: [ 0, 0, 3000 ],
+        fov: 30
+    }, {
+        left: 0,
+        bottom: 0,
+        width: 0.3333,
+        height: 0.3,
+        background: new THREE.Color().setRGB( 0.95, 0.95, 0.95 ),
+        eye: [ 3000, 0, 0 ],
+        fov: 50
+    }, {
+        left: 0.3333,
+        bottom: 0,
+        width: 0.3333,
+        height: 0.3,
+        background: new THREE.Color().setRGB( 0.95, 0.95, 0.95 ),
+        eye: [ 0, 3000, 0 ],
+        fov: 50
+    }, {
+        left: 0.6666,
+        bottom: 0,
+        width: 0.333,
+        height: 0.3,
+        background: new THREE.Color().setRGB( 0.95, 0.95, 0.95 ),
+        eye: [ 0, 0, 3000 ],
+        fov: 50
+    }];
+    
     function labelAxis(direction){
 
         p = { x: (direction=='x'?graphBounds.xmin:0), 
@@ -366,20 +436,6 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
         container = document.getElementById( 'cableFlysimCanvas' );
 
         // ----------------------------------------------------------------------------
-        //   Set up camera
-        // ----------------------------------------------------------------------------
-        vFOVRadians = 2 * Math.atan( windowHeight / ( 2 * 1500 ) );
-        fov = 40; 
-        startPosition = new THREE.Vector3( 0, 0, 3000 );
-        camera = new THREE.PerspectiveCamera( fov, windowWidth / windowHeight, 1, 30000 );
-        camera.position.set( startPosition.x, startPosition.y, startPosition.z );
-
-
-        controls = new THREE.TrackballControls( camera, container );
-        controls.damping = 0.2;
-        controls.addEventListener( 'change', render );
-
-        // ----------------------------------------------------------------------------
         //   Create scenes for webGL
         // ----------------------------------------------------------------------------
         
@@ -430,14 +486,83 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
     
     function animate() {
         requestAnimationFrame(animate);
-        controls.update();
+        for ( var ii = 0; ii < views.length; ++ii ) {
+            views[ii].controls.update();
+        }
     }
 
+    function updateSize() {
+        var ww  = $("#cableFlysimCanvas").innerWidth();
+        var wh = $("#cableFlysimCanvas").innerHeight();
+        
+        if ( windowWidth != ww || windowHeight != wh ) {
+            windowWidth  = ww;
+            windowHeight = wh;
+            glRenderer.setSize ( windowWidth, windowHeight );
+        }
+    }
+    
     function render() {
+
+        updateSize();
+
+        for ( var ii = 0; ii < views.length; ++ii ) {
+            view = views[ii];
+            camera = view.camera;
+            // view.updateCamera( camera, glScene );
+            var left   = Math.floor( windowWidth  * view.left );
+            var bottom = Math.floor( windowHeight * view.bottom );
+            var width  = Math.floor( windowWidth  * view.width );
+            var height = Math.floor( windowHeight * view.height );
+            glRenderer.setViewport( left, bottom, width, height );
+            glRenderer.setScissor( left, bottom, width, height );
+            glRenderer.setScissorTest( true );
+            glRenderer.setClearColor( view.background );
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            glRenderer.render( glScene, camera );
+        }
+
+        /*
         camera.lookAt( glScene.position );
         glRenderer.render( glScene, camera );
+        */
     }
 
+    // ----------------------------------------------------------------------------
+    //    Init multiple viewpoints
+    // ----------------------------------------------------------------------------
+    
+    for (var ii =  0; ii < views.length; ++ii ) {
+
+        var view = views[ii];
+        var camera = null;
+        
+        if (ii == 0) {
+            camera = new THREE.PerspectiveCamera( 
+                view.fov, windowWidth / windowHeight, 1, 10000 );
+        } else {
+            camera = new THREE.OrthographicCamera( 
+                0, windowWidth, 0, windowHeight, 100, 10000 );
+        }
+        
+        var controls = controls = new THREE.TrackballControls( camera, container );
+        controls.damping = 0.2;
+        
+        if (ii !=0 ) {
+            controls.noRotate = true;
+        }
+
+        camera.position.x = view.eye[ 0 ];
+        camera.position.y = view.eye[ 1 ];
+        camera.position.z = view.eye[ 2 ];
+        
+        controls.addEventListener( 'change', render );
+
+        view.camera = camera;
+        view.controls = controls;
+    }
+    
     // ----------------------------------------------------------------------------
     // ON RESIZE
     // ----------------------------------------------------------------------------
