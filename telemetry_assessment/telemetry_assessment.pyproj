@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{8c5a2992-f9f9-4dcb-872b-b36f48ac5c84}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>plot_performance.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId />
+    <InterpreterVersion />
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+    <PtvsTargetsFile>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets</PtvsTargetsFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="archive\archive\plot_performance - Copy.py" />
+    <Compile Include="archive\plot_performance.py" />
+    <Compile Include="archive\process_performance.py" />
+    <Compile Include="archive\to_docx.py" />
+    <Compile Include="plot_performance.py" />
+    <Compile Include="process_performance.py" />
+    <Compile Include="telemetry_assessment.py" />
+    <Compile Include="to_docx.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="archive\archive\161221\perf_facets.png" />
+    <Content Include="archive\archive\161221\telemetry_2d.png" />
+    <Content Include="archive\archive\161221\telemetry_3d.png" />
+    <Content Include="archive\archive\telemetry_2d - Copy.png" />
+    <Content Include="archive\archive\telemetry_2d_interp.png" />
+    <Content Include="archive\archive\telemetry_2d_interp_nearest.png" />
+    <Content Include="archive\archive\telemetry_3d - Copy.png" />
+    <Content Include="archive\archive\telemetry_3d_interp.png" />
+    <Content Include="archive\archive\telemetry_3d_interp_nearest.png" />
+    <Content Include="archive\archive\telemetry_3d_tri.png" />
+    <Content Include="archive\archive\telemetry_3d_tri_nearest.png" />
+    <Content Include="archive\data\facets_logErrorRate.png" />
+    <Content Include="archive\data\facets_MissingFrames.png" />
+    <Content Include="archive\data\facets_PowerV.png" />
+    <Content Include="archive\data\facets_signal.png" />
+    <Content Include="archive\data\telemetry_2d.png" />
+    <Content Include="archive\data\telemetry_3d.png" />
+    <Content Include="archive\data_2\facets_logErrorRate.png" />
+    <Content Include="archive\data_2\facets_MissingFrames.png" />
+    <Content Include="archive\data_2\facets_PowerV.png" />
+    <Content Include="archive\data_2\facets_signal.png" />
+    <Content Include="archive\data_2\telemetry_2d.png" />
+    <Content Include="archive\data_2\telemetry_3d.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="archive" />
+    <Folder Include="archive\archive" />
+    <Folder Include="archive\archive\161221" />
+    <Folder Include="archive\data" />
+    <Folder Include="archive\data_2" />
+  </ItemGroup>
+  <Import Project="$(PtvsTargetsFile)" Condition="Exists($(PtvsTargetsFile))" />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="!Exists($(PtvsTargetsFile))" />
+</Project>

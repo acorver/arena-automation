@@ -643,10 +643,12 @@ void updateExploreSpace(long elapsedTime) {
   long g_CurPosZ = (g_CurPosZ1+g_CurPosZ2)/2;
 
   /* If one of Z motors failed, restart motors */
+  /*
   if ( abs(g_CurPosZ1-g_CurPosZ2) > 50 ) {
     cmdStatus(NULL, NULL);
     cmdStartKangaroo(NULL, NULL);
   }
+  */
   
   /* Update until we arrive at position */
   if (abs(g_CurPosX - targetPositionX) > MAX_X_ERROR || 
@@ -662,17 +664,17 @@ void updateExploreSpace(long elapsedTime) {
     g_TimeUntilNextPosition -= elapsedTime;
     if (g_TimeUntilNextPosition < 0) {
 
-      g_TimeUntilNextPosition = 8000000;
+      g_TimeUntilNextPosition = 6000000;
       
-      targetPositionX += 30;
+      targetPositionX += 40;
       
       /* Reached the end of the line? */
-      if (targetPositionX > (g_MinPosX+g_MaxPosX)/2 + 550) {
-        targetPositionX = (g_MinPosX+g_MaxPosX)/2 - 550;
-        targetPositionZ += 40;
+      if (targetPositionX > (g_MinPosX+g_MaxPosX)/2 + 650) {
+        targetPositionX = (g_MinPosX+g_MaxPosX)/2 - 650;
+        targetPositionZ += 50;
       }
       /* Reached the end of the whole plane? */
-      if (targetPositionZ > 550) {
+      if (targetPositionZ > 600) {
         targetPositionZ = 0;
         targetPositionX = 0;
       

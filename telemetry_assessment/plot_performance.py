@@ -14,9 +14,9 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import Rbf, griddata
-import to_docx
+import to_docx, process_performance
 
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/'))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # =======================================================================================
 # Globals
@@ -30,11 +30,11 @@ data, dataOld, dataNew = None, None, None
 # Load data
 # =======================================================================================
 
-def loadData():
+def loadData(fnames):
     global data, dataOld, dataNew
-        
-    dataOld = pd.read_csv('old_transceiver_rigid_backpack.telemetry.csv')
-    dataNew = pd.read_csv('new_transceiver_rigid_backpack.telemetry.csv')
+    
+    dataOld = pd.read_csv(fnames[1][1].replace('.log','') + '.csv')
+    dataNew = pd.read_csv(fnames[0][1].replace('.log','') + '.csv')
 
     dataOld['z'] = 0.5 * (dataOld.z1 + dataOld.z2)
     dataNew['z'] = 0.5 * (dataNew.z1 + dataNew.z2)
@@ -52,8 +52,8 @@ def loadData():
 # =======================================================================================
 
 def interp(data, v, transform='mean'):
-    data['za'] = (data.z/40).round()*40
-    data['xa'] = ((data.x+550)/30).round() * 30 - 550
+    data['za'] = (data.z/50).round()*50
+    data['xa'] = (data.x/40).round() * 40
     data.logErrorRate[np.isinf(data.logErrorRate)] = -7
     data['zal'] = ['Z='+str(int(x)).zfill(3) for x in data['za']]
     
@@ -71,11 +71,17 @@ def interp(data, v, transform='mean'):
     elif transform=='mean':
         d = d.groupby(['x','z']).mean().reset_index() # Does this mean drop NAs?
     elif transform=='std':
-        d = d.groupby(['x','z']).std().reset_index() # Does this mean drop NAs?
+        d = d.groupby(['x','z']).std().reset_index() # Does this std drop NAs?
     else:
         raise Exception("Unknown transformation requested") 
-    x = np.linspace(-580, 580, 1170/30)
-    y = np.linspace( -40, 560, 600/40)
+    
+    #x = np.linspace(-580, 580, 1170/30)
+    #y = np.linspace( -40, 560, 600/40)
+    #x = np.linspace(-25*28, 25*28, 56)
+    #y = np.linspace(-30* 1, 30*25, 26)
+    x = np.linspace(-40 * 17, 40*17, 34)
+    y = np.linspace(-50 *  1, 50*14, 15)
+    
     xi, yi = np.meshgrid(x, y)
     zi = None
     if transform=='mean':
@@ -190,20 +196,29 @@ def processPlotType(pltType):
 # Entry point
 # =======================================================================================
 
-def run():    
+def run(fnames):    
+    
     pltTypes = ['2d', '3d', 'facets']
     
     # Load datasets
-    loadData()
+    loadData(fnames)
     
     # Draw each plot
     for pltType in pltTypes:
         processPlotType(pltType)
     
     # Conver to document!
-    to_docx.run()
+    to_docx.run(fnames)
     
     print("Done!")
 
 if __name__ == "__main__":
-    run()
+    
+    fnames = process_performance.getFilenames()
+
+    # Change the working directory (i.e. output directory) to the directory of the first file 
+    # (presumably all four files are in the same directory)
+    outdir = os.path.dirname(fnames[0][0])
+    os.chdir(outdir)
+    
+    run(fnames)

@@ -1,0 +1,6 @@
+*.png
+*.docx
+*.pdf
+*.telemetry
+archive/
+__pycache__/
