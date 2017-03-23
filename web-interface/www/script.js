@@ -10,8 +10,7 @@ arenaApp.config(function($routeProvider) {
 
         // route for the home page
         .when('/', {
-            templateUrl : 'log.html',
-            controller  : 'mainController'
+            redirectTo: '/log'
         })
 
         .when('/log', {
@@ -57,6 +56,34 @@ arenaApp.controller('mainController', function($scope, $rootScope, $http) {
 
     $rootScope.host = { ip: "http://10.101.30.47:1000" /*ip: 'http://10.101.30.47:7894'*/ };
     $scope.log = [];
+    $scope.running = false;
+    $scope.connectingToServer = true;
+    $scope.startingApplication = false;
+
+    /* Start server functions */
+    $scope.startApplicationServer = function() {
+
+        $scope.startingApplication = true;
+        $http({
+            method: 'GET', 
+            url: '/api/application/start'
+        }).then(function successCallback(response) {
+            $scope.startingApplication = false;
+        }, function errorCallback(response) {
+            $scope.startingApplication = false;
+        });
+    };
+    
+    $scope.stopApplicationServer = function() {
+
+        $http({
+            method: 'GET', 
+            url: '/api/application/stop'
+        }).then(
+            function successCallback(response) {}, 
+            function errorCallback(response) {}
+        );
+    };
 
     /* Start periodic check for new logging info */
     setInterval(function() {
@@ -65,11 +92,19 @@ arenaApp.controller('mainController', function($scope, $rootScope, $http) {
             url: $rootScope.host.ip + '/api/log/*/0'
         }).then(function successCallback(response) {
 
+            $scope.startingApplication = false;
+            $scope.running = true;
+            $scope.connectingToServer = false;
+            
             $scope.log = response.data.log;
 
         }, function errorCallback(response) {
             
-            $scope.msg = "Lost communication with server.";
+            $scope.startingApplication = false;
+            $scope.running = false;
+            $scope.connectingToServer = false;
+
+            $scope.msg = "";
         });
     }, 1000);
 });
@@ -80,7 +115,16 @@ arenaApp.controller('mainController', function($scope, $rootScope, $http) {
 
 arenaApp.controller('flysimController', function($scope, $rootScope, $http) {
 
-    
+    $scope.flysimCmd = '';
+
+    $scope.sendFlySimCommand = function() {
+         $http({
+            method: 'GET',
+            url: $rootScope.host.ip + '/api/flysim/' + $scope.flysimCmd
+        }).then(function successCallback(response) {
+        }, function errorCallback(response) {
+        });
+    };
 });
 
 /* ======================================================================================
@@ -472,6 +516,41 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
         // set up window resize listener
         window.addEventListener( 'resize', onWindowResize, false );
         animate();
+
+        // ----------------------------------------------------------------------------
+        //    Init multiple viewpoints
+        // ----------------------------------------------------------------------------
+        
+        for (var ii =  0; ii < views.length; ++ii ) {
+
+            var view = views[ii];
+            var camera = null;
+            
+            if (ii == 0) {
+                camera = new THREE.PerspectiveCamera( 
+                    view.fov, windowWidth / windowHeight, 1, 10000 );
+            } else {
+                camera = new THREE.OrthographicCamera( 
+                    0, windowWidth, 0, windowHeight, 100, 10000 );
+            }
+            
+            var controls = controls = new THREE.TrackballControls( camera, container );
+            controls.damping = 0.2;
+            
+            if (ii !=0 ) {
+                controls.noRotate = true;
+            }
+
+            camera.position.x = view.eye[ 0 ];
+            camera.position.y = view.eye[ 1 ];
+            camera.position.z = view.eye[ 2 ];
+            
+            controls.addEventListener( 'change', render );
+
+            view.camera = camera;
+            view.controls = controls;
+        }
+        
         
         // ----------------------------------------------------------------------------
         // Start update loop
@@ -487,7 +566,9 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
     function animate() {
         requestAnimationFrame(animate);
         for ( var ii = 0; ii < views.length; ++ii ) {
-            views[ii].controls.update();
+            if (views[ii].controls != null) {
+                views[ii].controls.update();
+            }
         }
     }
 
@@ -530,40 +611,6 @@ arenaApp.controller('cableFlysimController', function($scope, $rootScope, $http)
     }
 
     // ----------------------------------------------------------------------------
-    //    Init multiple viewpoints
-    // ----------------------------------------------------------------------------
-    
-    for (var ii =  0; ii < views.length; ++ii ) {
-
-        var view = views[ii];
-        var camera = null;
-        
-        if (ii == 0) {
-            camera = new THREE.PerspectiveCamera( 
-                view.fov, windowWidth / windowHeight, 1, 10000 );
-        } else {
-            camera = new THREE.OrthographicCamera( 
-                0, windowWidth, 0, windowHeight, 100, 10000 );
-        }
-        
-        var controls = controls = new THREE.TrackballControls( camera, container );
-        controls.damping = 0.2;
-        
-        if (ii !=0 ) {
-            controls.noRotate = true;
-        }
-
-        camera.position.x = view.eye[ 0 ];
-        camera.position.y = view.eye[ 1 ];
-        camera.position.z = view.eye[ 2 ];
-        
-        controls.addEventListener( 'change', render );
-
-        view.camera = camera;
-        view.controls = controls;
-    }
-    
-    // ----------------------------------------------------------------------------
     // ON RESIZE
     // ----------------------------------------------------------------------------
     
@@ -590,27 +637,42 @@ arenaApp.controller('powerController', function($scope, $rootScope, $http) {
 
     $scope.powerState = '';
     $scope.allPowerOn = 0;
+    $scope.powerDevices = {};
+    $scope.powerState = {};
 
-    $scope.allOn = function(allOn) {
-        var x = '';
-        if (allOn) { x = '+'; } else { x = '-'; }
-        $http.get('/api/power/1/'+x).then(function(response1){});
-        $http.get('/api/power/2/'+x).then(function(response1){});
-    };
+    /* Periodically check for power interfaces */
+    setInterval(function() {
+        $http({
+            method: 'GET',
+            url: '/api/power'
+        }).then(function successCallback(response) {
 
-    setInterval(function(){
-        
-        $http.get('/api/power/1/s').then(function(response1){
-           $http.get('/api/power/2/s').then(function(response2) {
-               var s = {};
-               var d1 = JSON.parse(response1.data.response.replace(",}","}"));
-               var d2 = JSON.parse(response2.data.response.replace(",}","}"));
-               for (var k in d1) { s['1.'+k] = d1[k]; }
-               for (var k in d2) { s['2.'+k] = d2[k]; }
-               $scope.powerState = JSON.stringify(s);
-           });
+            $scope.powerDevices = response.data.power;
+
+        }, function errorCallback(response) {});
+
+        angular.forEach($scope.powerDevices, function(value, key) {
+            $http.get('/api/power/'+key+'/s').then(function(response1){
+                var s = JSON.parse(response1.data.response.replace(",}","}"));
+                s.relaysOn = 'none';
+                if (s.state.every(function(el, index, array){ return el == 1; })) {
+                    s.relaysOn = 'all';
+                } else if (s.state.some(function(el, index, array){ return el == 1; })) {
+                    s.relaysOn = 'some';
+                }
+                s.id = key;
+                $scope.powerState[key] = s;
+            });
         });
-    }, 5000);
+    }, 1000);
+
+    $scope.switchRelay = function(device, newstate) {
+        $http({
+            method: 'GET',
+            url: '/api/power/' + device.id + '/' + (newstate==1?'+':'-')
+        }).then(function successCallback(response) {
+        }, function errorCallback(response) {});
+    };
 });
 
 /* ======================================================================================

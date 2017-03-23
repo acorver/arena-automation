@@ -2,6 +2,7 @@
     margin: 0;
     padding: 0;
 }
+div.clear { clear: both; }
 
 html, body {
     width: 100%;
@@ -19,7 +20,29 @@ html, body {
 }
 
 #container-log {
-    
+    padding: 30px;
+}
+
+#container-log .alert {
+    height: 60px;
+}
+#container-log .alert span {
+    line-height: 35px;
+}
+
+#container-log .alert button {
+    float: right;
+}
+
+#container-power {
+    padding: 30px;
+}
+#container-power .alert button {
+    float: right;
+}
+
+#container-flysim {
+    padding: 30px;
 }
 
 #container-settings {

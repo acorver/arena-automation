@@ -1,7 +1,26 @@
 
-Power state: {{powerState}}
+<div id="container-power">
 
-<div class="btn-group" ng-model="allPowerOn" bs-radio-group>
-  <label class="btn btn-default"><input type="radio" class="btn btn-default" value="0" ng-click="allOn(0)"> All power off</label>
-  <label class="btn btn-default"><input type="radio" class="btn btn-default" value="1" ng-click="allOn(1)"> All power on</label>
+<div class="alert" ng-class="{'alert-danger': device.relaysOn=='none', 'alert-success': device.relaysOn=='all'}" role="alert" id="alert-notrunning" ng-repeat="device in powerState">
+    <span>Power switch (contains {{device.state.length}} relays)</span>
+    
+    <span ng-if="device.relaysOn=='all'">
+        All relays are on.
+    </span>
+    <span ng-if="device.relaysOn=='some'">
+        Some, but not all, relays are on.
+    </span>
+    <span ng-if="device.relaysOn=='none'">
+        All relays are off.
+    </span>
+
+    <span class="time">(Device clock: {{device.time}})</span>
+
+    <button type="button" class="btn btn-success" ng-click="switchRelay(device,1)" 
+        ng-if="device.relaysOn!='all'"> Turn all relays on  </button>
+    <button type="button" class="btn btn-success" ng-click="switchRelay(device,0)" 
+        ng-if="device.relaysOn!='none'"> Turn all relays off </button>
+    <div class="clear" />
+</div>
+
 </div>

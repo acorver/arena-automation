@@ -1,6 +1,31 @@
 
 <div id="container-log">
-    <div>
+
+    <div class="alert alert-info" role="alert" id="alert-notrunning" ng-if="connectingToServer">
+        <span>Attempting to connect to ArenaAutomation server.</span>
+    </div>
+
+    <div class="alert alert-info" role="alert" id="alert-notrunning" ng-if="startingApplication">
+        <span>Starting ArenaAutomation server...</span>
+    </div>
+
+    <div class="alert alert-danger" role="alert" id="alert-notrunning" 
+        ng-if="!startingApplication && !connectingToServer && !running">
+        <span>The ArenaAutomation application does not appear to be running.</span>
+
+        <button type="button" class="btn btn-success" ng-click="startApplicationServer();"> Start Application </button>
+        <div class="clear" />
+    </div>
+
+    <div class="alert alert-success" role="alert" id="alert-notrunning" 
+        ng-if="!startingApplication && !connectingToServer && running">
+        <span>The ArenaAutomation application appears to be running successfully!</span>
+
+        <button type="button" class="btn btn-danger" ng-click="stopApplicationServer();"> Stop Application </button>
+        <div class="clear" />
+    </div>
+
+    <div id="log-window">
         <ul>
             <li class="log-msg">
                 {{msg}}

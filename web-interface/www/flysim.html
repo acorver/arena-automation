@@ -1,8 +1,19 @@
 
-<div class="input-group col-xs-5">
-  <span class="input-group-btn">
-    <button class="btn btn-primary" type="button" data-trigger="click" 
-        data-type="success" data-title="{{tooltip.title}}" bs-tooltip>Send Command</button>
-  </span>
-  <input type="text" class="form-control" data-placement="right" data-type="info" data-container="body" placeholder="Focus to toggle tooltip" data-trigger="focus" bs-tooltip="tooltip">
+<div id="container-flysim">
+
+    <p>
+        Note that currently sending flySim commands from this interface requires having the ArenaAutomation program 
+        running. Navigate to the Dashboard to start the application, and wait for it to connect to FlySim. 
+    </p>
+
+    <div class="input-group col-xs-5">
+    <span class="input-group-btn">
+        <button class="btn btn-primary" type="button" data-trigger="click" 
+            data-type="success" data-title="{{tooltip.title}}" bs-tooltip ng-click="sendFlySimCommand()">
+            Send Command</button>
+    </span>
+    <input type="text" class="form-control" data-placement="right" data-type="info" ng-model="flysimCmd" 
+        data-container="body" placeholder="Focus to toggle tooltip" data-trigger="focus" bs-tooltip="tooltip">
+    </div>
+
 </div>
