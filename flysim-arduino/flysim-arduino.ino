@@ -2,7 +2,7 @@
 /*
   This script controls a bead on a line, and is updated to interface with the Arena Automation system.
 
-  Last updated by Abel Corver, December 2016
+  Last updated by Abel Corver, March 2017
   Derived from code by Matteo Mischiati & Huai-Ti Lin
 */
 
@@ -15,6 +15,12 @@
 #include <Kangaroo.h>
 
 #include <ArduinoJson.h>
+
+// ================================================================
+// Quick-access settings
+// ================================================================
+
+const bool TRIALS_REQUIRE_PERCH = true;
 
 // ================================================================
 // Helper functions
@@ -172,6 +178,7 @@ long targetPositionX;
 long targetPositionZ;
 
 long g_TimeUntilTrial = 0;
+int  g_TrialIdx = 0;
 
 long g_VelocityBoostTimeLeft = 0;
 long g_VelocityBoostDir = 0;
@@ -180,6 +187,8 @@ bool g_VelocityBoostEnabled = false;
 // ----------------------
 //  DF state variables
 // ----------------------
+
+bool g_DfReadyOnPerch = false;
 
 boolean       DF_presence         = 0;
 boolean       DF_moving           = 0;
@@ -360,58 +369,6 @@ void cmdStatus(char** pArgs, uint8_t numArgs) {
   
   Serial.println("}");
 }
-
-/* Old cmdStatus code:
-  DynamicJsonBuffer jsonBuffer;
-  JsonObject& root = jsonBuffer.createObject();
-
-  root["function"] = g_CurrentUpdateFunctionStr;
-
-  root["status"] = g_Status;
-
-  root["PosX"]  = g_CurPosX;
-  root["PosZ1"] = g_CurPosZ1;
-  root["PosZ2"] = g_CurPosZ2;
-
-  root["MinPosX"] = g_MinPosX;
-  root["MaxPosX"] = g_MaxPosX;
-
-  root["VelX"]  = g_CurVelX;
-  root["VelZ1"] = g_CurVelZ1;
-  root["VelZ2"] = g_CurVelZ2;
-
-  Serial.println("status=");
-  Serial.println(String(root.measureLength()));
-  root.printTo(Serial);
-  return;
-
-  root["TargetPosX"]  = targetPositionX;
-  root["TargetPosZ1"] = targetPositionZ;
-  root["TargetPosZ2"] = targetPositionZ;
-
-  JsonArray& vTargetVelX       = root.createNestedArray("TargetVelX_Segments");
-  JsonArray& vTargetVelXbounds = root.createNestedArray("TargetVelX_Bounds");
-
-  for (int i = 0; i < NUM_VELOCITY_SEGMENTS  ; i++) {
-    vTargetVelX.add      (g_VelocitySegments[i]      );
-  }
-  for (int i = 0; i < NUM_VELOCITY_SEGMENTS - 1; i++) {
-    vTargetVelXbounds.add(g_VelocitySegmentBounds[i] );
-  }
-
-  root["TargetVelX"]      = targetVelocityX;
-  root["TargetVelZ1"]     = targetVelocityZ;
-  root["TargetVelZ2"]     = targetVelocityZ;
-
-  root["TargetVelNoiseX"] = targetVelocityNoiseX;
-
-  root["TimeUntilTrial"]  = g_TimeUntilTrial;
-
-  // Write JSON-formatted information to serial
-  Serial.println("status=");
-  root.printTo(Serial);
-  Serial.println("");
-*/
 
 // ================================================================
 // ====== COMMAND: (Re)Start Kangaroo drivers
@@ -722,6 +679,21 @@ void cmdSpeedX(char** pArgs, uint8_t numArgs) {
 }
 
 // ================================================================
+// ====== COMMAND: Notification of whether dF is on perch and aligned correctly
+// ================================================================
+
+void cmdDfOnPerch(char** pArgs, uint8_t numArgs) {
+
+  if (numArgs == 1) {
+
+    g_DfReadyOnPerch = (String(pArgs[0]).toInt() > 0);
+
+    Serial.print("Notified that dF perch status is: ");
+    Serial.println(String(pArgs[0]).toInt());
+  }
+}
+
+// ================================================================
 // ====== COMMAND: Generate back and forth sequence with delays in
 // =====           range [A,B] and absolute speeds in range [C,D],
 // =====           and heights in the range [E,F]
@@ -738,11 +710,24 @@ void cmdTrials(char** pArgs, uint8_t numArgs) {
 
 void updateTrials(long elapsedTime) {
 
-  g_TimeUntilTrial -= elapsedTime;
-  g_VelocityBoostTimeLeft -= elapsedTime;
+  long PRE_TRIAL_PERIOD = 5 * 1000000;
 
+  // Only allow trial to trigger if:
+  //    o No DF-ready requirement is set
+  //    o The DF is in fact ready (i.e. on perch and aligned)
+  //    o The trial would not fire regardless (i.e. previous trial happened too shortly before)
+  //    o The final seconds of countdown to trial have already commenced, and Cortex has potentially already been notified.
+  //      The dF might have flown away just prior to trial, but go through with the trial anyway.
+  
+  if (!TRIALS_REQUIRE_PERCH || g_DfReadyOnPerch || 
+    g_TimeUntilTrial - elapsedTime >= PRE_TRIAL_PERIOD || g_TimeUntilTrial < PRE_TRIAL_PERIOD) { 
+    
+    g_TimeUntilTrial -= elapsedTime;
+    //g_VelocityBoostTimeLeft -= elapsedTime;
+  }
+  
   // Are we close to trial start? If so, start cortex
-  if (g_TimeUntilTrial < 5 * 1000000) {
+  if (g_TimeUntilTrial < PRE_TRIAL_PERIOD) {
     triggerCortex(true);
   }
 
@@ -809,6 +794,7 @@ void updateTrials(long elapsedTime) {
     } else {
 
       // Wait a little bit longer, then trigger Cortex to stop saving
+      Serial.println("Starting new trial in 2 seconds.");
       delay(2000);
       triggerCortex(false);
 
@@ -827,7 +813,18 @@ void updateTrials(long elapsedTime) {
       long speedup = random(0,100)<=20?0:((random(0,100)<=50?1:-1)*random(200,400));
       long speed1 = dir >  0 ? speed1base : speed1base+speedup;
       long speed2 = dir <= 0 ? speed1base : speed1base+speedup;
-      long tWait = random(25, 45) * 1000000;
+      
+      long tWait;
+      if (g_TrialIdx < 5) {
+        tWait = random(9, 12) * 1000000;
+      } else {
+        tWait = random(50, 80) * 1000000;
+      }
+      
+      g_TrialIdx++;
+      if (g_TrialIdx > 6) { // Every 5 trials, enforce a longer wait
+        g_TrialIdx = 0;
+      }
       
       // DEBUG:
       //speed1 = 1000;
@@ -944,6 +941,8 @@ void processSerialCommand(char** pArgs, uint8_t numArgs) {
     fun = &cmdSpeedX;
   } else if (cmd == "trajectory" ) {
     fun = &cmdTrajectory;
+  } else if (cmd == "df_ready_on_perch" ) {
+    fun = &cmdDfOnPerch;
   } else {
 
     // Command not recognized....
@@ -952,7 +951,8 @@ void processSerialCommand(char** pArgs, uint8_t numArgs) {
     return;
   }
 
-  if (g_CurrentUpdateFunction != NULL && fun != &cmdAbort && fun != &cmdStatus) {
+  if (g_CurrentUpdateFunction != NULL && fun != &cmdAbort && 
+    fun != &cmdStatus && fun != &cmdDfOnPerch) {
     sendError("Aborting command, other function in progress");
     return;
   }
