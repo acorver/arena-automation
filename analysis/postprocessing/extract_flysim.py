@@ -29,7 +29,7 @@ from shared import util
 from postprocessing import extract_perching_locations
 
 # Global settings
-DEBUG = True
+DEBUG = False
 IGNORE_COUNT = False
 
 # Manually overwrite what file is processed (for debugging purposes)
