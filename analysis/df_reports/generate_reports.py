@@ -33,6 +33,7 @@ import gc, shutil, math, dateutil, datetime
 from distutils import dir_util
 import numpy as np
 import pandas as pd
+from scipy import interpolate
 import seaborn as sns
 import matplotlib as mpl
 import matplotlib.animation as mpl_animation
@@ -175,39 +176,41 @@ def plot3D(data, groupByColumn, out, cols=['x','y','z']):
     view.bgcolor = '#fff'
         
     cm = vispy.color.get_colormap('husl')
-    uniqueTrajs = np.unique(groupByColumn.as_matrix())
+    uniqueTrajs = np.unique(groupByColumn.as_matrix()).astype('int')
         
     for traji, traj in zip(range(len(uniqueTrajs)),uniqueTrajs):
         c = cm[(traj%10)/10.0]
-        vispy.scene.visuals.Line(
-            pos=data[groupByColumn==traj].as_matrix(cols),
-            color=c,
-            antialias=True,
-            connect='strip',
+        d = data[groupByColumn==traj].as_matrix(cols)
+        if d.shape[0] > 0:
+            vispy.scene.visuals.Line(
+                pos=d,
+                color=c,
+                antialias=True,
+                connect='strip',
+                parent=view.scene)
+    
+    xax = scene.Axis(pos='x', domain = [-500,500], view=view, tick_direction=(0, 1, 0),
+                font_size=20, axis_color='k', tick_color='k', text_color='k',
+                major_tick_length=10, minor_tick_length=5,
+                major_density = 0.2, minor_density = 0.2, 
+                parent=view.scene)
+    yax = scene.Axis(pos='y', domain = [-500,500], view=view, tick_direction=(1, 0, 0),
+            font_size=20, axis_color='k', tick_color='k', text_color='k',
+            major_tick_length=10, minor_tick_length=5,
+                major_density = 0.2, minor_density = 0.2, 
             parent=view.scene)
-
-        
+    zax = scene.Axis(pos='z', domain = [-100,700], view=view, tick_direction=(1, 0, 0),
+            font_size=20, axis_color='k', tick_color='k', text_color='k',
+            major_tick_length=10, minor_tick_length=5,
+                major_density = 0.2, minor_density = 0.2, 
+            parent=view.scene)
+    
     # Set camera view
     view.camera = 'turntable'
     #view.camera.elevation = 45
     view.camera.distance = 1000
     view.camera.azimuth = 135
-
-    xax = scene.Axis(pos='x', view=view, tick_direction=(0, 1, 0),
-                font_size=20, axis_color='k', tick_color='k', text_color='k',
-                major_tick_length=10, minor_tick_length=5,
-                major_density = 0.2, minor_density = 0.2, 
-                parent=view.scene)
-    yax = scene.Axis(pos='y', view=view, tick_direction=(1, 0, 0),
-            font_size=20, axis_color='k', tick_color='k', text_color='k',
-            major_tick_length=10, minor_tick_length=5,
-                major_density = 0.2, minor_density = 0.2, 
-            parent=view.scene)
-    zax = scene.Axis(pos='z', view=view, tick_direction=(1, 0, 0),
-            font_size=20, axis_color='k', tick_color='k', text_color='k',
-            major_tick_length=10, minor_tick_length=5,
-                major_density = 0.2, minor_density = 0.2, 
-            parent=view.scene)
+    
     g = scene.AxisGrid([xax, yax, zax], parent=view.scene, minor_color='#555', 
         major_color='#222', bg_color='#0002')
     
@@ -216,9 +219,8 @@ def plot3D(data, groupByColumn, out, cols=['x','y','z']):
         writer.append_data(canvas.render())
         writer.close()
     
-    # Close figure in order to release memory
+    # Free memory
     gc.collect()
-        
 
 # ========================================================
 # Plot trajectories in 3D
@@ -259,12 +261,14 @@ def plotTrajectories3D(dir, data):
         
         for traji, traj in zip(range(len(uniqueTrajs)),uniqueTrajs):
             c = cm[(traj%10)/10.0]
-            vispy.scene.visuals.Line(
-                pos=dataDf[dataDf.trajectory==traj].as_matrix(['x','y','z']),
-                color=c,
-                antialias=True,
-                connect='strip',
-                parent=view.scene)
+            d = dataDf[dataDf.trajectory==traj].as_matrix(['x','y','z'])
+            if d.shape[0] > 0:
+                vispy.scene.visuals.Line(
+                    pos=d,
+                    color=c,
+                    antialias=True,
+                    connect='strip',
+                    parent=view.scene)
         
         # Set camera view
         view.camera = 'turntable'
@@ -417,6 +421,27 @@ def plotDailyActivity(dir, data):
     data['srcDailyActivity'] = outName
 
 # ========================================================
+# Plot velocity
+# ========================================================
+
+def plotFlysimVelocity(dir, data):
+    
+    outName = ''
+    
+    fs = util.loadFlySim(data['file'])
+    # TEMPORARY: FILTER OUT BY HEIGHT, THIS CONDITION IS NOW INCORPORATED INTO extract_flysim.py
+    def f(x):
+        x['minz'] = x['flysim.z'].min()
+        x['zspan'] = x['flysim.z'].max() - x['flysim.z'].min()
+        return x
+    fs = fs.groupby(['trajectory',]).apply(f)
+    fs = fs[ (d.is_flysim) & (d.zspan<50) & (d.minz>100) ]
+    
+    # 
+    
+    data['srcTrajectoryVelocity'] = outName
+
+# ========================================================
 # Plot all flysim poinst to indicate the range of trajectories
 # ========================================================
 
@@ -427,20 +452,25 @@ def plotFlysim3D(dir, data):
     
     # Plot in 3D
     outName = 'flysim3d_unfiltered.png'
-    plot3D(fs, fs.flysimTraj, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
+    plot3D(fs, fs.trajectory, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
+    data['srcFlysim3D_unfiltered'] = outName
     
     # Plot, by now filter out trials unlikely to be flysim (i.e. unrecognized)
     outName = 'flysim3d.png'
 
-    d = fs[fs.is_flysim]
     # TEMPORARY: FILTER OUT BY HEIGHT, THIS CONDITION IS NOW INCORPORATED INTO extract_flysim.py
-    def f(x): 
-        x['minz'] = x['flysim.z'].min(skipna=True)
-    d.groupby('flysimTraj').apply(f)
+    d = d[ (d.is_flysim) & (d.zspan<50) & (d.minz>100) ]
     
-    plot3D(d, d.flysimTraj, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
+    plot3D(d, d.trajectory, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
     
     data['srcFlysim3D'] = outName
+    
+    # Plot, now center point only, without noise
+    outName = 'flysim3d_nonoise.png'
+    d = d[d.istraj]
+    plot3D(d, d.trajectory, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
+    data['srcFlysim3D_nonoise'] = outName
+    
     
     gc.collect()
 
@@ -451,7 +481,7 @@ def plotFlysim3D(dir, data):
 def processFile(file):
     
     # Determine output directory/files
-    dir = DIR_REPORTS + file[:(file.find('_') if '_' in file else len(file))] + '/'
+    dir = DIR_REPORTS + file[:(file.find('_') if '_' in file else len(file))].replace('.msgpack','') + '/'
     outFile = dir + 'index.html'
     
     # Initialize report directory
@@ -485,7 +515,10 @@ def processFile(file):
             except Exception as e:
                 # Log this error, so it can be displayed in the HTML report
                 data['errors'].append( str(e) )
-
+                # Log to an error log file as well
+                with open(dir + 'log.txt','a') as f:
+                    f.write(traceback.format_exc() + '\n\n')
+    
     # Write template
     with open(outFile, 'w') as fo:
         fo.write(template.render(data).replace(u'\ufeff',u''))
@@ -506,7 +539,9 @@ def run(async=False):
     else:
         if DEBUG:
             for file in files:
-                processFile(file)
+                # Process only recent files
+                if '2016-12-14' in file:
+                    processFile(file)
         else:
             with multiprocessing.Pool(processes=12) as pool:
                 (pool.map_async if async else pool.map)(processFile, files)

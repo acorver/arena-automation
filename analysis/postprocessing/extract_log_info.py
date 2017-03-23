@@ -3,11 +3,22 @@
 # This script extracts experimental log info
 #
 
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
 import os, sqlite3, re
 from datetime import datetime
-
-# Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Helper function
 def getTimeStr(time): return datetime.fromtimestamp(time//1000).strftime('%Y-%m-%d %H:%M:%S')
@@ -53,7 +64,7 @@ def processFile(file):
             for line in logFlysim:
                 foLog.write(','.join([str(x) for x in list(line)]) + '\n')
         
-        # Process flysim log
+        # Process flysim log (TODO: Parse new JSON format!!)
         for line in logFlysim:
             m = re.match('Started new trial: speed=([0-9]*), height=([0-9]*), wait=([0-9]*)', line[1])
             if m != None:
@@ -67,16 +78,17 @@ def processFile(file):
 # Entry point
 # =======================================================================================
 
-def run(async=False):
-    # Get all raw data files in data directory
-    files = [x for x in os.listdir('./') if x.endswith('.log')]
+def run(async=False, settings = None):    
     
-    # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime(x))
-    
+    if settings == None:
+        settings = util.askForExtractionSettings()
+
     # Process all log files:
-    for file in files:
-        processFile(file)    
+    for file in settings.files:
+        try:
+            processFile(file)
+        except Exception as e:
+            print(e)
 
 if __name__ == "__main__":
     run()

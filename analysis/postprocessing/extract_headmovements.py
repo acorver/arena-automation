@@ -11,8 +11,22 @@
 #      Allow closest match to frames longer ago
 # --------------------------------------------------------
 
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
 import os, math
-from postprocessing.util import *
+from shared import util
 import pandas as pd
 import numpy as np
 from scipy.stats import gaussian_kde
@@ -28,9 +42,6 @@ SEGM_MIN_FRAME_FRACTION = 0.25
 
 DBG_MAX_PROCESSED_FRAMES = 10e6
 DBG_MAX_PROCESSED_SEGM   = 10e6
-
-# Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # ========================================================
 # Fit sphere
@@ -219,7 +230,7 @@ def processFile(file):
     # Now mark all segments with this length
     lastInfoTime = time()
     irow = 0
-    for frame in readYFrames(file, nearbyVertexRange=MAX_HEADMARKER_DIST):
+    for frame in util.readYFrames(file, nearbyVertexRange=MAX_HEADMARKER_DIST):
         # Print progress info
         if (time() - lastInfoTime) > 5.0:
             lastInfoTime = time()

@@ -3,12 +3,22 @@
 # 
 #
 
-# Imports
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
 import os, sys, dateutil, datetime, winshell
 import pandas as pd
-
-# Change working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Global Variables
 VIDEO_SAVING_DELAY_SEC = 60
@@ -17,7 +27,10 @@ VIDEO_DIRECTORY        = 'Z:/data/dragonfly/behavior video/'
 
 videos = []
 
+# =======================================================================================
 # ...
+# =======================================================================================
+
 def processTrajectory(file, takeoffTrajectory, dataTakeoff):
     
     # Time:
@@ -40,7 +53,10 @@ def processTrajectory(file, takeoffTrajectory, dataTakeoff):
                     link.description = "Shortcut to "+filelink
                     link.write( os.path.abspath( f.replace('.mp4','.lnk') ) )
 
+# =======================================================================================
 # ...
+# =======================================================================================
+
 def processFile(file):
 
     fname = file+'_Cortex.takeoffs.csv'    
@@ -55,7 +71,10 @@ def processFile(file):
     for index, row in dataTakeoff.iterrows():
         processTrajectory(file, index, row)
 
+# =======================================================================================
 # 
+# =======================================================================================
+
 def findHighspeedVideos():
     for root, dirs, files in os.walk(VIDEO_DIRECTORY):
         for file in files:
@@ -64,8 +83,11 @@ def findHighspeedVideos():
                 t = datetime.datetime.fromtimestamp(os.path.getctime(absfile))
                 videos.append( (t, absfile) )
 
+# =======================================================================================
 # ...
-def run(async=False):
+# =======================================================================================
+
+def run(async=False, settings=None):
     
     # Search videos
     findHighspeedVideos()
@@ -76,6 +98,9 @@ def run(async=False):
         if os.path.isdir('../output/'+file):
             processFile(file)
 
+# =======================================================================================
 # Entry point for standalone execution
+# =======================================================================================
+
 if __name__ == "__main__":
     run()

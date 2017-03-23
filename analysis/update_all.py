@@ -18,6 +18,8 @@ from postprocessing import extract_headmovements
 from postprocessing import create_highspeed_links
 from postprocessing import plot_takeoffs
 
+from shared import util
+
 # TODO: Make arena interface display list of reports... =) And generate placeholder "in progress" html files?
 
 # Working directory is data directory
@@ -25,10 +27,13 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 if __name__ == "__main__":
     
+    # Ask for options
+    settings = util.askForExtractionSettings()
+
     # Process data with Python scripts
-    p1 = extract_flysim.run(async=False)
-    extract_log_info.run()
-    p2 = extract_perch_locations.run(async=False)
+    p1 = extract_flysim.run(async = False, settings = settings)
+    extract_log_info.run(settings = settings)
+    p2 = extract_perch_locations.run(async=False, settings = settings)
     
     # Make sure the previous processes have finished before starting the next ones
     p1.join()
@@ -37,7 +42,7 @@ if __name__ == "__main__":
     print("Done processing FlySim, now computing takeoffs.")
     
     # After FlySim trajectories have been extracted, we can process perching locations
-    p3 = extract_perching_locations.run(async=False)
+    p3 = extract_perching_locations.run(async=False, settings = settings)
     
     #extract_perching_orientations.run(async=True)
     #extract_headmovements.run()
@@ -47,8 +52,8 @@ if __name__ == "__main__":
     
     print("Done processing data, now plotting takeoffs.")
     
-    p5 = plot_takeoffs.run(async=False)
-    create_highspeed_links.run(async=False)
+    p5 = plot_takeoffs.run(async=False, settings = settings)
+    create_highspeed_links.run(async=False, settings = settings)
     
     # Make sure the previous processes have finished before generating the final report
     p5.join()
@@ -56,7 +61,7 @@ if __name__ == "__main__":
     print("Done plotting takeoffs, now generating reports.")
 
     # Generate the final report
-    generate_reports.run()
+    generate_reports.run(settings = settings)
     
     # Print done
     print("All data analysis is up to date.")

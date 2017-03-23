@@ -3,8 +3,21 @@
 # This script extracts FlySim trials
 #
 
-# Imports
-import os, sys, msgpack, multiprocessing, warnings
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
+import msgpack, multiprocessing, warnings
 import numpy as np
 import numpy_groupies as npg
 from time import time
@@ -12,21 +25,22 @@ import statsmodels.api as sm
 from functools import partial
 import pandas as pd
 
-import postprocessing.extract_perching_locations
+from shared import util
+from postprocessing import extract_perching_locations
 
 # Global settings
-DEBUG = False
+DEBUG = True
 IGNORE_COUNT = False
 
-# 
+# Manually overwrite what file is processed (for debugging purposes)
 #SINGLEFILE = '2016-11-07 12-51-23_Cortex.msgpack' # SINGLEFILE = None
 #SINGLEFILE = '2016-11-11 12-20-41_Cortex.msgpack'
-#SINGLEFILE = '2016-11-14 14-09-32_Cortex.msgpack'
 #SINGLEFILE = '2016-12-10 12-18-45.msgpack'
+#SINGLEFILE = '2017-03-21 14-18-21.msgpack'
 SINGLEFILE = ''
 
 # Set "overwrite" to True to overwrite existing files
-OVERWRITE = False
+OVERWRITE = True
 
 # Misc. constants
 CORTEX_NAN = 9999999
@@ -40,9 +54,6 @@ TRAJ_MAXDIST = 75
 # Minimum displacement a trajectory should have to be saved
 TRAJ_SAVE_MINDIST = 500
 TRAJ_SAVE_MINLEN  = 200
-
-# Change data directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Number of trajectories saved
 numSavedTraj = 0
@@ -160,13 +171,14 @@ def processFile(file):
     # Open output file
     with open(foName,'w') as fo, open(file,'rb') as f, open(foNameTracking,'w') as foTracking:
         # Write header
-        fo.write('trajectory, framestart, frameend, is_flysim, score_dir, score_r2, distanceFromYframe, '+
+        fo.write('flysimTraj, framestart, frameend, is_flysim, score_dir, score_r2, distanceFromYframe, '+
                  'distanceFromYframeSD, dist_ok, len_ok, dir_ok, std, stdX, stdY, stdZ\n')
 
         foTracking.write('trajectory,frame,x,y,z\n')
 
         # Get new data row
-        for x in msgpack.Unpacker(f):
+        for frame in util.iterMocapFrames(file):
+            
             # Print debug info
             numRecords += 1
 
@@ -175,53 +187,35 @@ def processFile(file):
                 print( ("["+file[-20:-1].replace('.msgpack','')+"] "+str(numRecords)+
                     " frames [{0:.2f}%], "+str(len(openTrajectories))+
                     " open traj").format(numRecords*100.0/totalNumRecords))
-            # ...
-            if not isinstance(x, int):
-                # Get Yframes
-                yframes = []
-                for b in x[2]:
-                    if 'Yframe' in b[0].decode():
-                        iframe = x[0]
-                        vertices = np.array([[z if z!=CORTEX_NAN else 
-                            float('NaN') for z in y] for y in b[1]])
-                        if np.all(vertices!=vertices): continue
-                        yframes.append( np.nanmean(vertices, axis=0) )
-
-                # Loop through unIDed points
-                for c in x[3]:
-                    iframe = x[0]
-                    pos = np.array([z if z!=CORTEX_NAN else 
-                        float('NaN') for z in c])
+            
+            # Calculate Yframe mean positions
+            yframes = [np.nanmean(x.vertices, axis=0) for x in frame.yframes]
+            
+            # Loop through unIDed points
+            for pos in frame.unidentifiedVertices:
+                # Find corresponding trajectory index 
+                minDist = 1e6
+                t = -1
+                for i in range(len(openTrajectories)):
+                    d = np.linalg.norm(pos - openTrajectories[i][-1][2])
+                    if d < minDist:
+                        minDist = d
+                        t = i
                     
-                    # Fast-forward to relevant part
-                    if DEBUG and iframe < 370000: continue
-
-                    # Continue if all vertices are NaN
-                    if np.all(pos!=pos): continue
-                    
-                    # Find corresponding trajectory index 
-                    minDist = 1e6
-                    t = -1
-                    for i in range(len(openTrajectories)):
-                        d = np.linalg.norm(pos - openTrajectories[i][-1][2])
-                        if d < minDist:
-                            minDist = d
-                            t = i
-                    
-                    # Recent enough trajectory?
-                    if t != -1 and (iframe - openTrajectories[t][-1][1]) > TRAJ_TIMEOUT:
-                        # Timed out... Now:
-                        #   o Determine whether this is a flySim trajectory
-                        #   o Remove this trajectory from the open list
-                        processTrajectory(openTrajectories[t], fo, foTracking)
-                        del openTrajectories[t]
-                    else:   
-                        # Recent enough... add data to existing or new trajectory 
-                        if t != -1 and minDist < TRAJ_MAXDIST: # and openTrajectories[t][-1][1] != iframe:
-                            openTrajectories[t].append( (openTrajectories[t][-1][0], iframe, pos, yframes) )
-                        else:
-                            trajectoryID += 1
-                            openTrajectories.append([(trajectoryID, iframe, pos, yframes),])
+                # Recent enough trajectory?
+                if t != -1 and (frame.frameID - openTrajectories[t][-1][1]) > TRAJ_TIMEOUT:
+                    # Timed out... Now:
+                    #   o Determine whether this is a flySim trajectory
+                    #   o Remove this trajectory from the open list
+                    processTrajectory(openTrajectories[t], fo, foTracking)
+                    del openTrajectories[t]
+                else:   
+                    # Recent enough... add data to existing or new trajectory 
+                    if t != -1 and minDist < TRAJ_MAXDIST: # and openTrajectories[t][-1][1] != iframe:
+                        openTrajectories[t].append( (openTrajectories[t][-1][0], frame.frameID, pos, yframes) )
+                    else:
+                        trajectoryID += 1
+                        openTrajectories.append([(trajectoryID, frame.frameID, pos, yframes),])
         
         # Process the remaining trajectories
         for t in openTrajectories:
@@ -231,20 +225,22 @@ def processFile(file):
 # Main loop
 # =======================================================================================
 
-def run(async=False):
-        
-    # Get files
-    files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
-
-    # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime(x))
-
+def run(async=False, settings = None):
+    
     if SINGLEFILE != '':
         processFile(SINGLEFILE)
     else:
-        with multiprocessing.Pool(processes=16) as pool:
-            (pool.map_async if async else pool.map)(processFile, files)
-            return pool
+        # Get files
+        if settings == None:
+            settings = util.askForExtractionSettings()
+        
+        if not DEBUG:
+            with multiprocessing.Pool(processes=16) as pool:
+                (pool.map_async if async else pool.map)(processFile, settings.files)
+                return pool
+        else:
+            for file in settings.files:
+                processFile(file)
 
     return None
 

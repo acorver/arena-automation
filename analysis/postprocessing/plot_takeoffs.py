@@ -1,4 +1,18 @@
 
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
 # Imports
 import os, gc, multiprocessing, dateutil, datetime, traceback
 import numpy as np
@@ -8,9 +22,6 @@ import matplotlib as mpl
 import matplotlib.animation as mpl_animation
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-
-# Set working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../../data'))
 
 # Global variables / settings
 DEBUG = False
@@ -156,19 +167,17 @@ def getTakeoffTrajectories(file, upward=True, flysim=False):
 # Entry point
 # =======================================================================================
 
-def run(async=False):
+def run(async=False, settings=None):
     
     # Get files
-    files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
+    if settings == None:
+        settings = util.askForExtractionSettings()    
 
-    # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime(x))
-    
     # Files to plot:
-    print('Files to plot:\n'+'\n'.join(files))
+    print('Files to plot:\n'+'\n'.join(settings.files))
     
     params = []
-    for file in files:
+    for file in settings.files:
         for upward in [False,]: #True, False]:
             for flysim in [True,False]: 
                 takeoffTrajs = getTakeoffTrajectories(file, upward=False, flysim=flysim)

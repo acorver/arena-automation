@@ -1,10 +1,21 @@
 
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
 import msgpack
 import numpy as np
 import math, os, multiprocessing
-
-# Set working directory
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 
 # Set "overwrite" to True to overwrite existing files
 OVERWRITE = False
@@ -40,11 +51,13 @@ def processFile(file):
         print(str(e))
         os.remove(outfile)
 
-def run(async=False):
-    
-    files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
+def run(async=False, settings=None):
+
+    if settings == None:
+        settings = util.askForExtractionSettings()
+
     with multiprocessing.Pool(processes=12) as pool:
-        (pool.map_async if async else pool.map)(processFile, files)
+        (pool.map_async if async else pool.map)(processFile, settings.files)
         return pool
     
     return None

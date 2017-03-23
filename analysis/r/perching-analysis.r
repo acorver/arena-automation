@@ -34,7 +34,7 @@ DEBUG <- FALSE
 
 # These groups define what data gets aggregated and plotted together
 groups = c(
-  '(2016-12-14 12-10-17)',
+  '(2016-12-14 17-47-07)',
   '(2016-10-(26).*)',
   '(2016-10-(25|22).*)',
   '(2016-10-(21).*)',

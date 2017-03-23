@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{76b3e4b1-9cd1-4076-a48b-7f13f62bc0b8}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>df_reports\generate_reports.py</StartupFile>
+    <StartupFile>update_all.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -36,6 +36,8 @@
     <Compile Include="postprocessing\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="shared\__init__.py" />
+    <Compile Include="test.py" />
     <Compile Include="update_all.py">
       <SubType>Code</SubType>
     </Compile>

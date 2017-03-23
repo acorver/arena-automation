@@ -7,10 +7,16 @@
 #         (Anthony Leonardo Lab, Dec. 2016)
 # --------------------------------------------------------
 
-import collections, msgpack
+import os, collections, msgpack
 import numpy as np
 from datetime import datetime
 import pandas as pd
+from scipy import interpolate
+
+import tkinter as tk
+from tkinter import filedialog
+from tkinter import messagebox
+from tkinter import simpledialog
 
 # =======================================================================================
 # Data Structures and Constants
@@ -18,10 +24,103 @@ import pandas as pd
 
 Frame = collections.namedtuple('Frame', 'frame pos vertices trajectory time nearbyVertices')
 
+MocapFrame = collections.namedtuple('MocapFrame', 'frameID yframes unidentifiedVertices')
+
+ExtractionSettings = collections.namedtuple('ExtractionSettings', 'files groupOutputByDay')
+
 CORTEX_NAN = 9999999
 
 # =======================================================================================
+# Ask for post-processing input files
+# =======================================================================================
+
+def askForExtractionSettings():
+    
+    files = []
+    groupOutputByDay = False
+    
+    # Ask for filenames
+    root = tk.Tk()
+    root.withdraw()
+    numCameras = 0
+    filepaths = filedialog.askopenfilenames(title="Select the raw data files (.msgpack) to process.")
+    files += root.tk.splitlist(filepaths)    
+        
+    # Process newest files first
+    files.sort(key=lambda x: -os.path.getmtime(x))
+    
+    return ExtractionSettings(files, False)
+
+
+# =======================================================================================
 # Read Yframes and return the parsed structure (use this as iterator in for loop)
+# =======================================================================================
+
+def iterMocapFrames(file, nearbyVertexRange=None):
+    
+    # Parse .msgpack file format
+    #    o This file format was used for data files between ~August 2016 - present...
+    #    o In the future, we may switch to another data format, in which case this function 
+    #      can simply be expanded, without having to change other functions.
+    
+    if file.endswith('.msgpack'):
+        with open(file,'rb') as f:
+            for x in msgpack.Unpacker(f):
+                
+                iframe = x[0]
+                yframes = []
+                unidentifiedVertices = []
+                
+                if not isinstance(x, int):
+                    
+                    # Parse ID'ed markers
+                    for b in x[2]:
+                        if 'Yframe' in b[0].decode():
+                            vertices = np.array([[z if z!=CORTEX_NAN else 
+                                float('NaN') for z in y] for y in b[1]])
+
+                            # Continue if all vertices are NaN
+                            if np.all(vertices!=vertices): continue
+
+                            pos = np.nanmean(vertices, axis=0)
+                    
+                            # Get time if it exists (older files don't have a time field)
+                            t = x[5] if len(x)>=6 else 0
+                    
+                            # Optionally get nearby vertices
+                            nearbyVertices = None
+                            if nearbyVertexRange != None:
+                                nearbyVertices = []
+                                for c in x[3]:
+                                    # Get vertex
+                                    v = np.array([z if z!=CORTEX_NAN else 
+                                        float('NaN') for z in c])
+                                    # Don't accept markers with any NaN's at this point
+                                    if not np.any(v!=v):
+                                        # Only proceed if this vertex is close enough
+                                        if np.linalg.norm(v - pos) < nearbyVertexRange:
+                                            nearbyVertices.append(v)
+                                    
+                            # Pass data to processing function
+                            yframes.append( Frame(frame=iframe, vertices=vertices, pos=pos, 
+                                trajectory=-1, time=t, nearbyVertices=nearbyVertices) )
+    
+                    # Parse unID'ed markers
+                    for b in x[3]:
+                        pos = np.array([z if z!=CORTEX_NAN else float('NaN') for z in b])
+                        
+                        # Continue if all vertices are NaN
+                        if np.all(pos!=pos): continue
+                    
+                        unidentifiedVertices.append(pos)
+                
+                # Done!
+                yield MocapFrame(iframe, yframes, unidentifiedVertices)
+    else:
+        raise Exception("Motion capture data format not supported: " + file)
+
+# =======================================================================================
+# DEPRECATED: Read Yframes and return the parsed structure (use this as iterator in for loop)
 # =======================================================================================
 
 def readYFrames(file, nearbyVertexRange=None):
@@ -119,6 +218,33 @@ def loadFlySim(file):
         fsTracking['frameend']   = fsTracking['frameend'].ffill()
         fsTracking['is_flysim']  = fsTracking['is_flysim'].ffill()
         fsTracking['flysimTraj'] = fsTracking['flysimTraj'].ffill()
+        
+        def f(x):
+            x['minz'] = x['flysim.z'].min()
+            x['zspan'] = x['flysim.z'].max() - x['flysim.z'].min()
+            x['is_flysim'] = (x.is_flysim) & (x.zspan<50) & (x.minz>100)
+            
+            d = x.groupby(['frame',]).mean().reset_index()
+            # Note: Dropping duplicates required for scipy.interpolate.splprep
+            d.drop_duplicates(inplace=True, subset=['flysim.x','flysim.y','flysim.z'])
+            d = d.as_matrix(['frame','flysim.x','flysim.y','flysim.z'])
+            d = d[d[:,0].argsort()]
+            tck, u = interpolate.splprep([d[:,1], d[:,2], d[:,3]], s=200)
+            unew = np.arange(0, 1.0, 1.0 / x.shape[0])
+            out = interpolate.splev(unew, tck)
+            x['fs.appr.x'] = out[0][0:x.shape[0]]
+            x['fs.appr.y'] = out[1][0:x.shape[0]]
+            x['fs.appr.z'] = out[2][0:x.shape[0]]
+            x['_e'] = np.linalg.norm(np.array([
+                x['flysim.x']-x['fs.appr.x'],
+                x['flysim.y']-x['fs.appr.y'],
+                x['flysim.z']-x['fs.appr.z']]), axis=0)
+            return x
+
+        fsTracking = fsTracking.groupby(['trajectory',]).apply(f)
+        idx = (fsTracking.groupby(['trajectory','frame'])['_e'].transform(min) == fsTracking._e)
+        fsTracking['istraj'] = np.repeat(False, fsTracking.shape[0])
+        fsTracking['istraj'][idx] = np.repeat(True, sum(idx))
         
         return fsTracking
     except pd.io.common.EmptyDataError as e:

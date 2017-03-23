@@ -3,6 +3,20 @@
 # Extract continuous blocks where the animal sits in a certain location
 #
 
+# =======================================================================================
+# Change working directory so this script can be run independently as well as as a module
+# =======================================================================================
+
+import os, sys
+if __name__ == "__main__": 
+    p = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(p,'../../data'))
+    sys.path.insert(0, os.path.join(p,'../'))
+
+# =======================================================================================
+# Imports for this script
+# =======================================================================================
+
 import numpy as np
 import msgpack, collections, math, os, multiprocessing, sys, csv
 from time import time
@@ -12,7 +26,11 @@ import statsmodels.formula.api as smf
 import pandas as pd
 from scipy import stats
 import gc
-from postprocessing.util import *
+from shared import util
+
+# =======================================================================================
+# Global constants
+# =======================================================================================
 
 # Set "overwrite" to True to overwrite existing files
 OVERWRITE = False
@@ -300,21 +318,23 @@ def processFile(file):
 # Entry point
 # =======================================================================================
 
-def run(async=False):
+def run(async=False, settings=None):
     
     if SINGLEFILE != "":
         processFile(SINGLEFILE)
     else:
-        # Get all raw data files in data directory
-        files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
-        
-        # Process newest files first
-        files.sort(key=lambda x: -os.path.getmtime(x))
-        
-        with multiprocessing.Pool(processes=16) as pool:
-            (pool.map_async if async else pool.map)(processFile, files)
-            return pool
-    
+        # Get files
+        if settings == None:
+            settings = util.askForExtractionSettings()
+
+        if not DEBUG:
+            with multiprocessing.Pool(processes=16) as pool:
+                (pool.map_async if async else pool.map)(processFile, settings.files)
+                return pool
+        else:
+            for file in settings.files:
+                processFile(file)
+
     return None
 
 if __name__ == '__main__':    
