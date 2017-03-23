@@ -56,6 +56,8 @@ using json = nlohmann::json;
 
 #include <msgpack.hpp>
 
-#define ELPP_THREAD_SAFE
-#include <easyloggingpp/easylogging++.h>
+//#define ELPP_THREAD_SAFE
+//#include <easyloggingpp/easylogging++.h>
 
+#include <linalg/linalg.h>
+#define PI 3.14159265358979323846

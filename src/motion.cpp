@@ -18,18 +18,26 @@
 #include "hardware.h"
 #include "motiontracker_velocity.h"
 #include "motiontracker_z.h"
+#include "rotatingperch.h"
 
 // Global variables
 boost::lockfree::spsc_queue<motion::CortexFrame*,
 	boost::lockfree::capacity<1000000> > 
 	                         g_FrameBuffer, 
-	                         g_FrameBufferSave;
+	                         g_FrameBufferSave,
+							 g_FrameBufferMisc;
+
+boost::atomic<unsigned long> g_FrameBufferSize, g_FrameBufferSaveSize, g_FrameBufferMiscSize;
+
 boost::atomic<int>           g_nLastFrameIndex;
 int                          saveFramesMaxIndex = -1;
 std::queue<sFrameOfData>     saveBuffer;
 int                          totalBufferedFrames = 0;
 unsigned long                lastSavedFrameID;
 std::deque<sFrameOfData*>    recentlySavedFrames;
+unsigned int                 g_nFramesSinceRawCortexCameraSave;
+boost::mutex				 g_RawCortexCameraSaveLock;
+bool                         g_bCortexRecording;
 
 // Initialize global variables
 std::ofstream g_fsMotionDebugInfo;
@@ -57,6 +65,9 @@ int motion::Init( boost::thread* pThread ) {
 
     // Set variables
     g_nLastFrameIndex = -1;
+	g_bCortexRecording = false;
+
+	g_FrameBufferSize = g_FrameBufferSaveSize = g_FrameBufferMiscSize = 0;
 
     // Register the function that Cortex calls when new data arrives
     nResult = Cortex_SetDataHandlerFunc(motion::BufferFrame);
@@ -70,8 +81,12 @@ int motion::Init( boost::thread* pThread ) {
     Cortex_SetClientCommunicationEnabled(1);
 
     // Start Cortex interface and get information on the connection found
-    nResult = Cortex_Initialize("10.101.30.47", "10.101.30.48", "225.1.1.1");
-    nResult = Cortex_GetHostInfo(&hostInfo);
+	//nResult = Cortex_Initialize("10.101.30.47", "10.101.30.48", "225.1.1.1");
+	nResult = Cortex_Initialize(
+		strdup(_s<std::string>("cortex.szTalkToHostNicCardAddress").c_str()),
+		strdup(_s<std::string>("cortex.szHostNicCardAddress").c_str()),
+		strdup(_s<std::string>("cortex.szHostMulticastAddress").c_str()));
+	nResult = Cortex_GetHostInfo(&hostInfo);
 
     int portTalkToHost, portHost, portHostMulticast, portTalkToClientsRequest, portTalktoClientsMulticast, portClientsMulticast;
     nResult = Cortex_GetPortNumbers(&portTalkToHost, &portHost, &portHostMulticast, &portTalkToClientsRequest, &portTalktoClientsMulticast, &portClientsMulticast);
@@ -102,15 +117,18 @@ int motion::Init( boost::thread* pThread ) {
         return 1;
     }
 
-	// Start recording Cortex
-	RecordCortex(true);
+	// Start recording raw Cortex data
+	motion::RecordCortex();
 
     // Initialize debug info for evaluating motion tracking data in real time
     g_fsMotionDebugInfo = std::ofstream( (common::GetCommonOutputPrefix()+".motionlog") );
 
-    // Initialize separate thread
+    // Initialize separate threads
     boost::thread t1(motion::WatchFrameBuffer);
-    boost::thread t2(motion::WatchFrameBufferSave);
+	boost::thread t2(motion::WatchFrameBufferSave);
+	boost::thread t3(motion::WatchFrameBufferMisc);
+	boost::thread t4(motion::MonitorStatus);
+	boost::thread t5(motion::ContinuouslyRecordCortex);
 
     // Done!
     return 0;
@@ -124,28 +142,73 @@ void motion::EnableMotionTrigger(bool enabled) {
     g_bMotionTriggerEnabled = enabled;
 }
 
+void motion::MonitorStatus() {
+	while (true) {
+
+		std::string msg =
+			std::string("FrameBufferSize = ")     + std::to_string(g_FrameBufferSize    ) + std::string(", ") +
+			std::string("FrameBufferSaveSize = ") + std::to_string(g_FrameBufferSaveSize) + std::string(", ") +
+			std::string("FrameBufferMiscSize = ") + std::to_string(g_FrameBufferMiscSize) + std::string(".");
+		logging::Log(msg.c_str());
+		
+		boost::this_thread::sleep_for(boost::chrono::seconds(10));
+	}
+}
+
+
+void motion::ContinuouslyRecordCortex() {
+
+	while(true) {
+		// Save Cortex raw camera data
+		motion::RecordCortex();
+		
+		boost::this_thread::sleep_for(boost::chrono::seconds(_s<int>("cortex.seconds_between_raw_saves")));
+	}
+}
+
 // ----------------------------------------------
-// Name:  RecordCortex()
+// Name:  motion::RecordCortexrtex()
 // Desc:  Send a request for Cortex to record data. The recorded data is later post-processed to 
 //        extract the raw data and merge it with the other dataset.
+// Note:  This function can be called from multiple threads at once, and needs 
+//        to explicitly enforce thread safety.
 // ----------------------------------------------
 
-void motion::RecordCortex(bool record) {
+void motion::RecordCortex() {
 
+	// Lock to enforce thread-safety
+	boost::mutex::scoped_lock local_lock(g_RawCortexCameraSaveLock);
+	
 	int   nRet = RC_GeneralError;
 	void *pResponse;
 	int   nBytes;
 
-	for (int tries = 0; tries < 5; tries++) {
-		if (record) {
-			nRet = Cortex_Request("StartRecording", &pResponse, &nBytes);
-		} else {
+	logging::Log("[MOTION] (Re-)Triggering Cortex raw recording...");
+
+	// Stop & save previous recording block
+	if (g_bCortexRecording) {
+		for (int tries = 0; tries < 20; tries++) {
 			nRet = Cortex_Request("StopRecording", &pResponse, &nBytes);
-		}
-		if (nRet == RC_Okay) {
-			break;
+			if (nRet == RC_Okay) {
+				break;
+			}
+			boost::this_thread::sleep_for(boost::chrono::milliseconds(200));
 		}
 	}
+
+	g_bCortexRecording = true;
+
+	// Start (new) recording block
+	for (int tries = 0; tries < 13; tries++) {
+		nRet = Cortex_Request("StartRecording", &pResponse, &nBytes);
+		boost::this_thread::sleep_for(boost::chrono::milliseconds(333));
+	}
+
+	boost::this_thread::sleep_for(boost::chrono::milliseconds(3000));
+	nRet = Cortex_Request("StartRecording", &pResponse, &nBytes);
+		
+	// Reset frames
+	g_nFramesSinceRawCortexCameraSave = 0;
 }
 
 // ----------------------------------------------
@@ -172,19 +235,36 @@ void motion::BufferFrame(sFrameOfData* frameOfData) {
 
     // Save copy of frame data
 	CortexFrame* pCortexFrame = new CortexFrame();
-	pCortexFrame->nTimestampReceived = common::GetTimestamp(); // still error.... is this a timestamp issue?
-	pCortexFrame->pFrame = new sFrameOfData();
-    memset(pCortexFrame->pFrame, 0, sizeof(sFrameOfData));
-    Cortex_CopyFrame(frameOfData, pCortexFrame->pFrame);
-    g_FrameBuffer.push(pCortexFrame);
-    
-    // Save copy for the saving thread (TODO: Perhaps don't copy the frame twice?)
+	if (pCortexFrame) {
+		pCortexFrame->nTimestampReceived = common::GetTimestamp(); // still error.... is this a timestamp issue?
+		pCortexFrame->pFrame = new sFrameOfData();
+		memset(pCortexFrame->pFrame, 0, sizeof(sFrameOfData));
+		Cortex_CopyFrame(frameOfData, pCortexFrame->pFrame);
+		g_FrameBuffer.push(pCortexFrame);
+		g_FrameBufferSize++;
+	}
+
+	// Save copy for the saving thread (TODO: Perhaps don't copy the frame twice?)
 	CortexFrame* pCortexFrame2 = new CortexFrame();
-	pCortexFrame2->nTimestampReceived = common::GetTimestamp();
-	pCortexFrame2->pFrame = new sFrameOfData();
-    memset(pCortexFrame2->pFrame, 0, sizeof(sFrameOfData));
-    Cortex_CopyFrame(frameOfData, pCortexFrame2->pFrame);
-    g_FrameBufferSave.push(pCortexFrame2);
+	if (pCortexFrame2) {
+		pCortexFrame2->nTimestampReceived = pCortexFrame->nTimestampReceived;
+		pCortexFrame2->pFrame = new sFrameOfData();
+		memset(pCortexFrame2->pFrame, 0, sizeof(sFrameOfData));
+		Cortex_CopyFrame(frameOfData, pCortexFrame2->pFrame);
+		g_FrameBufferSave.push(pCortexFrame2);
+		g_FrameBufferSaveSize++;
+	}
+
+	// Save copy for the saving thread (TODO: Perhaps don't copy the frame thrice?)
+	CortexFrame* pCortexFrame3 = new CortexFrame();
+	if (pCortexFrame3) {
+		pCortexFrame3->nTimestampReceived = pCortexFrame->nTimestampReceived;
+		pCortexFrame3->pFrame = new sFrameOfData();
+		memset(pCortexFrame3->pFrame, 0, sizeof(sFrameOfData));
+		Cortex_CopyFrame(frameOfData, pCortexFrame3->pFrame);
+		g_FrameBufferMisc.push(pCortexFrame3);
+		g_FrameBufferMiscSize++;
+	}
 
     // Record the most recent frame index
     g_nLastFrameIndex = frameOfData->iFrame;
@@ -208,7 +288,19 @@ void motion::WatchFrameBuffer() {
 	CortexFrame *pCortexFrame;
 
     while (true) {
+		// Make sure this buffer never gets too big
+		while (g_FrameBufferSize > 10) {
+			g_FrameBuffer.pop(pCortexFrame);
+			g_FrameBufferSize--;
+
+			Cortex_FreeFrame(pCortexFrame->pFrame);
+			delete pCortexFrame->pFrame;
+			delete pCortexFrame;
+		}
+
         if (g_FrameBuffer.pop(pCortexFrame)) {
+			g_FrameBufferSize--;
+
             motion::ProcessFrame(pCortexFrame);
 
             Cortex_FreeFrame(pCortexFrame->pFrame);
@@ -236,8 +328,23 @@ void motion::WatchFrameBufferSave() {
 	CortexFrame *pCortexFrame;
 
     while (true) {
-        if (g_FrameBufferSave.pop(pCortexFrame)) {
 
+		// Make sure this buffer never gets too big
+		while (g_FrameBufferSaveSize > 10000) {
+			g_FrameBufferSave.pop(pCortexFrame);
+			g_FrameBufferSaveSize--;
+
+			// TODO: Report loss of data!
+
+			Cortex_FreeFrame(pCortexFrame->pFrame);
+			delete pCortexFrame->pFrame;
+			delete pCortexFrame;
+		}
+
+        if (g_FrameBufferSave.pop(pCortexFrame)) {
+			g_FrameBufferSaveSize--;
+
+			// Save this frame
             motion::SaveFrameMsgPack(fo, pCortexFrame);
 
             Cortex_FreeFrame(pCortexFrame->pFrame);
@@ -255,6 +362,36 @@ void motion::WatchFrameBufferSave() {
     fo2.close();
 }
 
+void motion::WatchFrameBufferMisc() {
+
+	CortexFrame *pCortexFrame;
+
+	while (true) {
+		
+		// Make sure this buffer never gets too big
+		while (g_FrameBufferMiscSize > 5) {
+			g_FrameBufferMisc.pop(pCortexFrame);
+			g_FrameBufferMiscSize--;
+
+			Cortex_FreeFrame(pCortexFrame->pFrame);
+			delete pCortexFrame->pFrame;
+			delete pCortexFrame;
+		}
+		
+		if (g_FrameBufferMisc.pop(pCortexFrame)) {
+			g_FrameBufferMiscSize--;
+
+			rotatingperch::updatePerch(pCortexFrame);
+			
+			Cortex_FreeFrame(pCortexFrame->pFrame);
+			delete pCortexFrame->pFrame;
+			delete pCortexFrame;
+		}
+		else {
+			boost::this_thread::sleep_for(boost::chrono::milliseconds(1));
+		}
+	}
+}
 // ----------------------------------------------
 // Name:  ProcessFrameBuffer()
 // Desc:  This function will decide if the dragonfly

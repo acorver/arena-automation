@@ -31,7 +31,7 @@ namespace motion {
 
 	void SetLogEnabled(bool enabled);
 	
-	void RecordCortex(bool record);
+	void RecordCortex();
 	
 	void BufferFrame(sFrameOfData* FrameOfData);
 
@@ -41,13 +41,16 @@ namespace motion {
 
 	void WatchFrameBuffer();
 	void WatchFrameBufferSave();
+	void WatchFrameBufferMisc();
+	void MonitorStatus();
+	void ContinuouslyRecordCortex();
 
 	void ProcessFrame(CortexFrame *pCortexFrame);
 
 	void GetMarkers();
 
 	void EnableMotionTrigger(bool enabled);
-
+	
 	void Save(std::string prefix, float startTimeAgo, float endTimeAgo);
 
 	void SaveFrameMsgPack(std::ofstream& o, CortexFrame *pCortexFrame);

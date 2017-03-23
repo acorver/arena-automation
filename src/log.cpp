@@ -63,40 +63,38 @@ void logging::Log(const char* msg, ...) {
 	std::string ts = common::GetTimestampStr();
 	std::string s = std::string(buffer);
 	std::string s2 = ts + "," + s;
-	
+
+	/* FOR SOME REASON THIS DOESN'T WORK:
+	sql = "INSERT INTO LOG (MSG) VALUES (?)";
 	for (int tryNum = 0; tryNum < 1; tryNum++) {
-
-		sql = "INSERT INTO LOG VALUES (\"" + boost::replace_all_copy(
-			common::GetTimestampStr() + "," + std::string(buffer), "\"", "\\\"") + "\")";
-
-		if (sqlite3_exec(g_pDB, sql.c_str(), 0, 0, &zErrMsg) == SQLITE_OK) {
-			break;
-		}
-
-		/*
 		if (sqlite3_prepare_v2(g_pDB, sql.c_str(), -1, &pStmt, 0) == SQLITE_OK) {
-			sqlite3_bind_text(pStmt, 0, s.c_str(), s.size(), SQLITE_TRANSIENT);
-			while (sqlite3_step(pStmt) != SQLITE_DONE) {
-				// 
-				int test = 0;
-			}
+			sqlite3_bind_text(pStmt, 0, s2.c_str(), ts.size(), SQLITE_TRANSIENT);
+			while (sqlite3_step(pStmt) != SQLITE_DONE) {}
 			sqlite3_finalize(pStmt);
 		}
-		else {
-			const char* err = sqlite3_errmsg(g_pDB);
-		}
-		*/
 	}
+	*/
 
 	sql = "INSERT INTO PLOG (timestamp, msg) VALUES (?,?)";
 	
 	for (int tryNum = 0; tryNum < 1; tryNum++) {
 		if (sqlite3_prepare_v2(g_pDB, sql.c_str(), -1, &pStmt, 0) == SQLITE_OK) {
-			sqlite3_bind_text(pStmt, 0, ts.c_str(), ts.size(), SQLITE_TRANSIENT);
-			sqlite3_bind_text(pStmt, 1, s.c_str(), s.size(), SQLITE_TRANSIENT);
+			sqlite3_bind_text(pStmt, 1, ts.c_str(), ts.size(), SQLITE_TRANSIENT);
+			sqlite3_bind_text(pStmt, 2, s.c_str(), s.size(), SQLITE_TRANSIENT);
 			while (sqlite3_step(pStmt) != SQLITE_DONE) {}
 			sqlite3_finalize(pStmt);
 		}
+	}
+
+	// This is somewhat of a hack, but gets around the seeming inability to do regular 
+	// bind_* calls on FTS5 tables...
+	sql = "INSERT INTO LOG SELECT timestamp||': '||msg FROM PLOG ORDER BY id DESC LIMIT 1;";
+	
+	if (sqlite3_exec(g_pDB, sql.c_str(), 0, 0, &zErrMsg) == SQLITE_OK) {
+		// Success!
+	} else {
+		const char* errmsg = sqlite3_errmsg(g_pDB);
+		std::cout << "LOG ERROR: " << errmsg << "\n";
 	}
 
 	return;

@@ -10,6 +10,7 @@
 #include "hardware.h"
 #include "usbcamera.h"
 #include "settings.h"
+#include "rotatingperch.h"
 #include "log.h"
 
 int main() {
@@ -25,7 +26,8 @@ int main() {
 	// Initialize settings
 	settings::Init();
 
-	// Initialize the common output prefix
+	// Initialize the common output prefix (would have been set without calling 
+	// this in advance, but this prevents asynchronous race conditions).
 	common::GetCommonOutputPrefix();
 
 	// Initialize the log
@@ -46,6 +48,9 @@ int main() {
 
 	// Attempt to initialize motion processing
 	nResult = motion::Init( &t2 );
+
+	// Attempt to initialize perches
+	rotatingperch::Init();
 
 	// Attempt to initialize photron cameras
 	if (settings::GetSettings()["settings"]["photron"]["enabled"] ) {

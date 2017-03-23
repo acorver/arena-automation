@@ -96,7 +96,7 @@
     <IncludePath>$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\;$(IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
     <ReferencePath>$(ReferencePath)</ReferencePath>
     <CustomBuildAfterTargets />
-    <OutDir>$(SolutionDir)..\build\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)..\deploy\</OutDir>
     <IntDir>$(SolutionDir)..\build\intermediate\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -218,6 +218,7 @@
     <ClCompile Include="motion.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="rotatingperch.cpp" />
     <ClCompile Include="server.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Use</PrecompiledHeader>
     </ClCompile>
@@ -242,6 +243,7 @@
     <ClInclude Include="hardware.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="motion.h" />
+    <ClInclude Include="rotatingperch.h" />
     <ClInclude Include="server.h" />
     <ClInclude Include="settings.h" />
     <ClInclude Include="stdafx.h" />

@@ -31,9 +31,17 @@ namespace settings {
 // Copy GetSetting for shorthand use (make this code duplication more elegant in the future)
 template<typename T>
 T _s(const char* key) {
-	//try {
+
 	return g_SettingsMap[key].get<T>();
-	//} catch (...) {
-	//	return dynamic_cast<float>(g_SettingsMap[key].get<double>);
-	//}
+}
+// Safe version of _s, which checks for existence first
+template<typename T>
+T _ss(const char* key) {
+
+	if (g_SettingsMap.find(key) == g_SettingsMap.end()) {
+		return T();
+	}
+	else {
+		return g_SettingsMap[key].get<T>();
+	}
 }

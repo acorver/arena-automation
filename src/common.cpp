@@ -49,7 +49,7 @@ std::string common::GetTimeStr(const char* pattern) {
 		new boost::posix_time::time_facet(pattern);
 	ss.imbue(std::locale(ss.getloc(), pFileFacet));
 	ss << boost::posix_time::second_clock::local_time();
-	return std::string(ss.str().c_str());
+	return std::string(ss.str());
 }
 
 // This function returns a prefix for all data files to use
@@ -57,10 +57,11 @@ std::string g_CommonOutputPrefix = "";
 std::string common::GetCommonOutputPrefix() {
 
 	if (g_CommonOutputPrefix == "") {
-		g_CommonOutputPrefix == common::GetTimeStr(_s<std::string>("output_prefix").c_str());
-	} else {
-		return g_CommonOutputPrefix;
-	}
+		std::string outputPrefix = _s<std::string>("output_prefix");
+		g_CommonOutputPrefix = common::GetTimeStr(outputPrefix.c_str());
+	} 
+	
+	return g_CommonOutputPrefix;
 }
 
 

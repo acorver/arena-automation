@@ -78,6 +78,9 @@
     <ClCompile Include="motiontracker_zaccel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="rotatingperch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="settings.h">
@@ -126,6 +129,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="motiontracker_zaccel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="rotatingperch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
