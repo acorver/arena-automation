@@ -16,17 +16,18 @@ import comtypes.client
 from docx import Document
 from docx.shared import Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+import process_performance
 
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data/'))
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-def run():
+def run(fnames):
 
     # =======================================================================================
     # Settings
     # =======================================================================================
 
-    mdate = datetime.datetime.strftime(datetime.datetime.fromtimestamp(os.path.getmtime( \
-        'new_transceiver_rigid_backpack.arduino.position.log')), '%Y-%m-%d %H:%M')
+    mdate = datetime.datetime.strftime(datetime.datetime.fromtimestamp( \
+        os.path.getmtime(fnames[0][0])), '%Y-%m-%d %H:%M')
     fname = 'telemetry_performance_' + mdate.replace(' ','_').replace(':','-') + '.docx'
     absfname = os.path.abspath( fname )
 
@@ -84,4 +85,4 @@ def run():
 # ===========================================================================================
 
 if __name__ == "__main__":
-    run()
+    run(process_performance.getFilenames())
