@@ -27,7 +27,10 @@ def processFile(file):
     print("Started file: "+file)
     outfile = file.replace('.msgpack','.perch_objects.csv')
     try:
-        if OVERWRITE or not os.path.isfile( outfile ):
+        # Don't overwrite existing file
+        if not OVERWRITE and os.path.isfile( outfile ): 
+            print("Skipping file: "+file)
+        else:
             i = 0
             with open(outfile, 'w') as fo:
                 with open(file,'rb') as f:

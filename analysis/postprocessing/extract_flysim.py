@@ -40,7 +40,7 @@ IGNORE_COUNT = False
 SINGLEFILE = ''
 
 # Set "overwrite" to True to overwrite existing files
-OVERWRITE = True
+OVERWRITE = False
 
 # Misc. constants
 CORTEX_NAN = 9999999

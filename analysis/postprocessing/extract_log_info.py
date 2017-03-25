@@ -27,8 +27,9 @@ def getTimeStr(time): return datetime.fromtimestamp(time//1000).strftime('%Y-%m-
 # Process log
 # =======================================================================================
 
-def processFile(file):
+def processFile(dataFile):
     
+    file = dataFile.replace(".msgpack",".log")
     fnameLogOut = file.replace('.log','.log.txt')
     fnameOut = file.replace('.log','.trials.csv')
     

@@ -33,7 +33,7 @@ from shared import util
 # =======================================================================================
 
 # Set "overwrite" to True to overwrite existing files
-OVERWRITE = False
+OVERWRITE = True
 
 # ...
 DEBUG = False
@@ -184,7 +184,7 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
             params = f.params.tolist()
         
         ## Save
-        takeoff = [fr[1], fr[1]-fr[0], frames[0].trajectory, frames[0].time, getTimeStr(frames[0].time), 
+        takeoff = [fr[1], fr[1]-fr[0], frames[0].trajectory, frames[0].time, util.getTimeStr(frames[0].time), 
             bboxSize, maxUpwardSpeed,framePeak,flysimTraj] + params + [R2,]
         takeoffs.append( [takeoffID, ] + takeoff )
         takeoffID += 1
@@ -200,7 +200,7 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
         takeoff  = min(a, key=lambda x:x[1])[0][0] if len(a)>0 else -1
         relFrame = min(a, key=lambda x:x[1])[0][1] if len(a)>0 else ''
         # Save
-        foTracking.write( ','.join([str(x) for x in [t.frame, relFrame, t.trajectory, t.time, getTimeStr(t.time), takeoff, ] + t.pos.tolist()]) + '\n' )
+        foTracking.write( ','.join([str(x) for x in [t.frame, relFrame, t.trajectory, t.time, util.getTimeStr(t.time), takeoff, ] + t.pos.tolist()]) + '\n' )
     
     return takeoffID
 
@@ -212,7 +212,7 @@ def savePerchInfo(foPerches, trajectory, frameRange, numFrames, timeRange, bound
 
         foPerches.write( ','.join([str(x) for x in list(frameRange)+[numFrames,]+[trajectory[0].trajectory, ]+avg.tolist()+
             boundsMin.tolist()+boundsMax.tolist()+list(timeRange)+
-            [getTimeStr(timeRange[0]),getTimeStr(timeRange[1])]]) + '\n' )
+            [util.getTimeStr(timeRange[0]), util.getTimeStr(timeRange[1])]]) + '\n' )
         foPerches.flush()
 
 # =======================================================================================
@@ -237,7 +237,7 @@ def processFile(file):
 
     # Read known flysim locations
     print(dbgHeader+"Started reading flysim")
-    fsTracking = loadFlySim(file) 
+    fsTracking = util.loadFlySim(file) 
     flysim = {}
     for (rowid, row) in fsTracking.iterrows():
         frame = int(row['frame'])
@@ -253,7 +253,7 @@ def processFile(file):
     # Start loop
     lastInfoTime = time()
     numRecords = 0
-    totalNumRecords = countRecords(file)
+    totalNumRecords = util.countRecords(file)
 
     takeoffID = 0
 
@@ -271,7 +271,7 @@ def processFile(file):
         
         foTracking.write('frame,relframe,trajectory,timestamp,time,takeoffTraj,x,y,z\n')
 
-        for frame in readYFrames(file):
+        for frame in util.readYFrames(file):
             # Print debug info
             numRecords += 1
             if (time() - lastInfoTime) > 5.0:
@@ -300,11 +300,11 @@ def processFile(file):
             # add data to existing or new trajectory
             p = None
             if t != -1 and minDist < TRAJ_MAXDIST:
-                p = updateYFrame(frame, trajectory=openTrajectories[t][-1].trajectory)
+                p = util.updateYFrame(frame, trajectory=openTrajectories[t][-1].trajectory)
                 openTrajectories[t].append( p )
             else:
                 trajectoryID += 1
-                p = updateYFrame(frame, trajectory=trajectoryID)
+                p = util.updateYFrame(frame, trajectory=trajectoryID)
                 openTrajectories.append([p,])
         
         # Process remaining open trajectories
