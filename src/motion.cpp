@@ -518,6 +518,11 @@ void motion::SaveFrameMsgPack(std::ofstream& o, CortexFrame *pCortexFrame) {
 
 void motion::Save(std::string prefix, float startTimeAgo, float endTimeAgo) {
 
+	// WE no longer separately save Cortex frame data... As all frames are recorded, as well as trigger signals, 
+	// this information can be more accurateoy reconstructed that way... (i.e. without the delays, duplication, etc. 
+	// that this function would introduce...)
+
+	/*
     logging::Log("[MOTION] Saving Cortex data.");
 
     std::ofstream fo( prefix + "_cortex.msgpack", std::ofstream::binary);
@@ -527,4 +532,5 @@ void motion::Save(std::string prefix, float startTimeAgo, float endTimeAgo) {
     fo.close();
 
     logging::Log("[MOTION] Finished saving Cortex data.");
+	*/
 }

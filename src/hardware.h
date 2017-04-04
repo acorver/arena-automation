@@ -7,7 +7,7 @@ namespace hardware {
 
 	void Init( boost::thread* pThread );
 
-	void SendTrigger();
+	void SendTrigger(bool forceTrigger = false);
 
 	const char* SendFlySimCommand(const char* cmd);
 

@@ -75,6 +75,10 @@ unsigned long photron::SoftwareTrigger() {
 
 	// Confirms the operating mode of each device
 	for (int i = 0; i < cameraInfo.size(); i++) {
+
+		SetPlaybackMode(cameraInfo[i].nDeviceNo, &nStatus, &nErrorCode);
+
+		/*
 		ready = false;
 		while (!ready) {
 			nRet = PDC_GetStatus(
@@ -97,11 +101,12 @@ unsigned long photron::SoftwareTrigger() {
 				}
 			}
 		}
+		*/
 	}
 }
 
 // ============================================================================
-// Name: GetStatus
+// Name: SetLiveMode
 // Desc: 
 // ============================================================================
 
@@ -133,6 +138,51 @@ unsigned long photron::SetLiveMode(unsigned long nDeviceNo, unsigned long *nStat
 
 	return PDC_SUCCEEDED;
 }
+
+// ============================================================================
+// Name: SetExternalInMode
+// Desc: 
+// ============================================================================
+
+unsigned long photron::SetExternalInMode(unsigned long deviceNo, unsigned long extInPortNo, unsigned long mode) {
+	
+	unsigned long nRet, nMode, nErrorCode;
+
+	while (true) {
+
+		nRet = PDC_GetExternalInMode(
+			deviceNo,
+			extInPortNo,
+			&nMode,
+			&nErrorCode
+		);
+
+		if (nRet != PDC_SUCCEEDED || nMode != mode) {
+			
+			nRet = PDC_SetExternalInMode(
+				deviceNo,
+				extInPortNo,
+				mode,
+				&nErrorCode
+			);
+
+			if (nRet != PDC_SUCCEEDED) {
+				printf("[CAMERA] Failed to set external port %d to mode %d. Error code %d. Retrying...\n", extInPortNo, mode, nErrorCode);
+			}
+
+		} else if (nRet == PDC_SUCCEEDED && nMode == mode) {
+			break;
+		}
+	}
+
+	printf("[CAMERA] Successfully set external port %d to mode %d\n", extInPortNo, mode);
+	return PDC_SUCCEEDED;
+}
+
+// ============================================================================
+// Name: SetPlaybackMode
+// Desc: 
+// ============================================================================
 
 unsigned long photron::SetPlaybackMode(unsigned long nDeviceNo, unsigned long *nStatus, unsigned long *nErrorCode) {
 	unsigned long nRet, tries = 0;
@@ -241,15 +291,11 @@ unsigned long photron::StartRecording() {
 		// Set device into live mode
 		nRet = photron::SetLiveMode(cameraInfo[i].nDeviceNo, &nStatus, &nErrorCode);
 
-		if (nRet == PDC_FAILED) {
-			logging::Log("[CAMERA] PDC_SetShutterSpeedFps %d", nErrorCode);
-			return 1;
-		}
-
 		// Configure child devices
 		for (int c = 0; c < cameraInfo[i].nChildNos.size(); c++) {
 
 			// Set the recording rate [TODO!!! --> (DEPRECATED: Cameras are synced with external signal)
+			/*
 			nRet = PDC_SetRecordRate(
 				cameraInfo[i].nDeviceNo,
 				cameraInfo[i].nChildNos[c],
@@ -260,6 +306,7 @@ unsigned long photron::StartRecording() {
 				logging::Log("[CAMERA] PDC_SetRecordRate %d", nErrorCode);
 				return 1;
 			}
+			*/
 
 			nRet = PDC_GetRecordRate(
 				cameraInfo[i].nDeviceNo,
@@ -268,8 +315,11 @@ unsigned long photron::StartRecording() {
 				&nErrorCode);
 
 			if (nRet == PDC_FAILED) {
-				logging::Log("[CAMERA] PDC_SetRecordRate %d", nErrorCode);
+				logging::Log("[CAMERA] PDC_GetRecordRate %d", nErrorCode);
 				return 1;
+			} else {
+				logging::Log("[CAMERA] Detected a framerate of %d fps for camera %d (child %d).", 
+					nRate, cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c]);
 			}
 
 			// Set shutter speed
@@ -295,8 +345,6 @@ unsigned long photron::StartRecording() {
 				logging::Log("[CAMERA] PDC_SetResolution %d", nErrorCode);
 				return 1;
 			}
-
-			// TODO: Set shutter speed!
 
 			char nDepth = 0;
 			nRet = PDC_GetBitDepth(
@@ -617,7 +665,7 @@ int photron::Init(boost::thread* pThread) {
 			photron::SetLutMode(nDeviceNos[i], nChildNos[c], PDC_LUT_USER1, &nErrorCode);
 		}
 
-		// Get valid inputs
+		// Get valid inputs (currently for debug only --- set a breakpoint after these statements to discover valid values to use below...)
 		nRet = PDC_GetExternalInModeList(
 			nDeviceNos[i],
 			1,
@@ -637,62 +685,19 @@ int photron::Init(boost::thread* pThread) {
 		// Set synchronization clock
 		nExtInPortNo = 1;			   /* FASTCAM SA1/SA1.1 Input Terminal Port1 : INPUT 1 */
 		nMode = PDC_EXT_IN_OTHERSSYNC_POSI;
+		photron::SetExternalInMode(nDeviceNos[i], nExtInPortNo, nMode);
 
-		/* TODO: DEBUG:
-		nRet = PDC_SetExternalInMode(
-		nDeviceNos[i],
-		nExtInPortNo,
-		nMode,
-		&nErrorCode);
-		*/
-
-		if (nRet = PDC_FAILED) {
-			printf("[CAMERA] PDC_SetExternalInMode error %d\n", nErrorCode);
-			return 1;
-		}
-
-		nRet = PDC_GetExternalInMode(
-			nDeviceNos[i],
-			nExtInPortNo,
-			&nMode,
+		// Check that the sync in signal is recognized (debug only)
+		nRet = PDC_GetSyncInSignalStatus(
+			cameraInfo[i].nDeviceNo,
+			&nStatus,
 			&nErrorCode
 		);
-
-		if (nRet = PDC_FAILED) {
-			printf("[CAMERA] PDC_SetExternalInMode error %d\n", nErrorCode);
-			return 1;
-		}
 
 		// Set TTL signal
 		nExtInPortNo = 3;
 		nMode = PDC_EXT_IN_TRIGGER_POSI;  /* TTL Trigger Input Signal */
-
-		while (true) {
-			nRet = PDC_GetExternalInMode(
-				nDeviceNos[i],
-				nExtInPortNo,
-				&nMode,
-				&nErrorCode);
-
-			if (nRet = PDC_FAILED) {
-				logging::Log("[CAMERA] PDC_GetExternalInMode error %d", nErrorCode);
-			} else {
-				if (nMode == PDC_EXT_IN_TRIGGER_POSI) {
-					logging::Log("[CAMERA] PDC_GetExternalInMode successfully returned mode %d", nMode);
-					break;
-				} else {
-					nRet = PDC_SetExternalInMode(
-						nDeviceNos[i],
-						nExtInPortNo,
-						PDC_EXT_IN_TRIGGER_POSI,
-						&nErrorCode);
-
-					if (nRet = PDC_FAILED) {
-						logging::Log("[CAMERA] PDC_SetExternalInMode error %d", nErrorCode);
-					}
-				}
-			}
-		}
+		photron::SetExternalInMode(nDeviceNos[i], nExtInPortNo, nMode);
 	}
 
 	// Configure the device for recording
@@ -852,15 +857,17 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 
 	// Variables
 	FILE *pPipe;
-	unsigned long nRet, nErrorCode, nMode, nStatus = -1;
+	unsigned long nRet, nErrorCode, nMode, nStatus = -1, nSize;
 	std::chrono::high_resolution_clock::time_point startTime =
 		std::chrono::high_resolution_clock::now();
-	std::ptrdiff_t nSize = (nByteSize / _s<int>("photron.saved_frame_increment")) + 1024*1024;
-	unsigned char *pBuf = (unsigned char*)malloc(nSize); // new unsigned char[nByteSize];
+	
+	//std::ptrdiff_t nSize = (nByteSize / _s<int>("photron.saved_frame_increment")) + 1024*1024;
+	
+	//unsigned char *pBuf = (unsigned char*)malloc(nSize); // new unsigned char[nByteSize];
 
 	int imgcols = 1024, imgrows = 1024, elemSize = 1;
-	std::ptrdiff_t lBlockSize = std::ptrdiff_t(imgrows * imgcols * elemSize) * std::ptrdiff_t(1024);
-	std::ptrdiff_t pEnd = std::ptrdiff_t(pBuf) + nSize;
+	//std::ptrdiff_t lBlockSize = std::ptrdiff_t(imgrows * imgcols * elemSize) * std::ptrdiff_t(1024);
+	//std::ptrdiff_t pEnd = std::ptrdiff_t(pBuf) + nSize;
 
 	// Set playback mode
 	photron::SetPlaybackMode(cameraInfo[i].nDeviceNo, &nStatus, &nErrorCode);
@@ -895,7 +902,35 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 	// Start downloading
 	logging::Log("[CAMERA] Camera %d started downloading frames [%d to %d].", cameraInfo[i].nDeviceNo, iStartFrame, iEndFrame);
 
-	// Download each frame
+	// Save AVI file
+	nErrorCode = PDC_SUCCEEDED;
+	PDC_AVIFileSaveOpenA(
+		cameraInfo[i].nDeviceNo,
+		cameraInfo[i].nChildNos[c],
+		file.c_str(),
+		_s<int>("photron.fps"),
+		PDC_COMPRESS_DIALOG_HIDE,
+		&nErrorCode
+	);
+
+	for (int f = iStartFrame; f <= iEndFrame; f += _s<int>("photron.saved_frame_increment")) {
+		PDC_AVIFileSave(
+			cameraInfo[i].nDeviceNo,
+			cameraInfo[i].nChildNos[c],
+			f,
+			&nSize,
+			&nErrorCode
+		);
+	}
+
+	PDC_AVIFileSaveClose(
+		cameraInfo[i].nDeviceNo,
+		cameraInfo[i].nChildNos[c],
+		&nErrorCode
+	);
+
+	// Download each frame to RAM
+	/*
 	for (int f = iStartFrame; f <= iEndFrame; f+=_s<int>("photron.saved_frame_increment")) {
 		while (true) {
 			nRet = PDC_GetMemImageData(
@@ -922,6 +957,7 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 			}
 		}
 	}
+	*/
 
 	numPhotronRetrieving--;
 
@@ -931,6 +967,7 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 			std::chrono::high_resolution_clock::now() - startTime).count());
 
 
+	/*
 	// Construct command
 	std::stringstream sstm;
 	sstm << "ffmpeg -y -f rawvideo -vcodec rawvideo -s " << imgcols << "x" << imgrows << 
@@ -950,9 +987,10 @@ void _SaveToFile(std::string const& file, int i, int c, int iStartFrame, int iEn
 
 	// Free memory!!
 	delete[] pBuf;
+	*/
 }
 
-void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo) {
+void photron::Save(std::string prefix, float startTimeAgo, float endTimeAgo) {
 
 	// Variables
 	unsigned long nRet = 1;
@@ -981,6 +1019,7 @@ void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo)
 				bTriggerSuccess = false; break;
 			}
 		}
+		if (bTriggerSuccess) { break; }
 		boost::this_thread::sleep_for(boost::chrono::milliseconds(50));
 	}
 	if (!bTriggerSuccess) {
@@ -989,11 +1028,20 @@ void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo)
 		logging::Log("[CAMERA] Success: Hardware trigger successfully stopped camera recording");
 	}
 
-	// Switch to playback (and do software trigger if necessary)
-	nRet = photron::SoftwareTrigger();
+	// do software trigger if necessary
+	if (!bTriggerSuccess) {
+		nRet = photron::SoftwareTrigger();
+	}
 
 	unsigned int camI = -1;
 	for (int i = 0; i < cameraInfo.size(); i++) {
+
+		photron::SetPlaybackMode(
+			cameraInfo[i].nDeviceNo,
+			&nStatus,
+			&nErrorCode
+		);
+
 		for (int c = 0; c < cameraInfo[i].nChildNos.size(); c++) {
 
 			camI++;
@@ -1016,8 +1064,11 @@ void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo)
 					cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c], frameInfo.m_nRecordedFrames);
 			}
 
-			iStartFrame = long(frameInfo.m_nEnd - startTimeAgo * _s<int>("photron.fps") - _s<int>("photron.saved_frames_before"));
-			iEndFrame   = long(frameInfo.m_nEnd - endTimeAgo   * _s<int>("photron.fps") + _s<int>("photron.saved_frames_after"));
+			// For now, we ignore startTimeAgo / endTimeAgo (it is not currently used by the program)
+			//iStartFrame = long(frameInfo.m_nEnd - startTimeAgo * _s<int>("photron.fps") - _s<int>("photron.saved_frames_before"));
+			//iEndFrame = long(frameInfo.m_nEnd - endTimeAgo   * _s<int>("photron.fps") + _s<int>("photron.saved_frames_after"));
+			iStartFrame = long(frameInfo.m_nTrigger - _s<int>("photron.saved_frames_before"));
+			iEndFrame   = long(frameInfo.m_nTrigger + _s<int>("photron.saved_frames_after"));
 
 			// Make sure the start/end frame don't exceed the recorded range
 			if (iStartFrame < frameInfo.m_nStart) {
@@ -1040,8 +1091,8 @@ void photron::Save(std::string filePrefix, float startTimeAgo, float endTimeAgo)
 			std::ptrdiff_t nByteSize = std::ptrdiff_t(1024 * 1024) * std::ptrdiff_t(iEndFrame + 2 - iStartFrame); // Should this be iEndFrame+1 or +2?
 
 			// Get filename
-			std::string fileStr = filePrefix + common::toStr("photron_%d_%d.mp4",
-				cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c]);
+			std::string fileStr = prefix + common::toStr("_%d_%d.photron.avi",
+						cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c]);
 
 			// Save to file on separate thread!
 			numPhotronRetrieving++;

@@ -37,7 +37,7 @@ void motion::ProcessFrame_Z(motion::CortexFrame *pCortexFrame) {
 				if (frameOfData->BodyData[i].Markers[j][2] > _s<float>("tracking.tracker_z.threshold")) {
 					
 					if (g_bMotionTriggerEnabled) {
-						common::Save(0.0f, 0.0f);
+						common::Trigger(0.0f, 0.0f, false);
 					}
 					else {
 						logging::Log("[MOTION] Not saving takeoff as motion triggering is currently disabled.");

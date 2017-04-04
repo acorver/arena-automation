@@ -166,6 +166,7 @@ void usbcamera::UpdateLiveImage() {
 			timeNow = boost::posix_time::second_clock::local_time();
 
 			// Trigger?
+			/* DEPRECATED: Currently we don't support triggering from image motion alone... Only the mocap MAC system can currently be used for automated real-time triggering.
 			// Note: Enforce minimum buffer size, as the algorithm (especially background subtraction) is unstable for few frames
 			if (radius.size() > 0 && radius.size() < 5 && 
 				bufferFrames.size() > 150) {
@@ -181,8 +182,9 @@ void usbcamera::UpdateLiveImage() {
 				float startTimeAgo = 0.001f * (timeNow - timeMovementStart).total_milliseconds();
 				float endTimeAgo   = 0.0f;
 				timeMovementStart = boost::posix_time::not_a_date_time;
-				common::Save( startTimeAgo, endTimeAgo );
+				common::Trigger( startTimeAgo, endTimeAgo );
 			}
+			*/
 		}
 	}
 }

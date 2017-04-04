@@ -205,13 +205,17 @@ long hardware::GetTimeUntilNextFlysimTrialInMS() {
 		g_NextFlysimTrialTime).total_milliseconds();
 }
 
-void hardware::SendTrigger() {
+void hardware::SendTrigger(bool forceTrigger) {
 
 	char serialBuffer[128];
 
-	if (_s<bool>("tracking.trigger_hardware_only_on_flysim_trials")) {
-		if (GetTimeUntilNextFlysimTrialInMS() > _s<int>("tracking.trigger_hardware_after_flysim_max")) {
-			logging::Log("[HARDWARE] Not triggering hardware because takeoff did not occur soon enough after a FlySim trial.");
+	// Trigger requests can potentially be overriden by other constraints, unless the trigger was forced (e.g. manual trigger request from web interface)
+	if (!forceTrigger) {
+		if (_s<bool>("tracking.trigger_hardware_only_on_flysim_trials")) {
+			if (GetTimeUntilNextFlysimTrialInMS() > _s<int>("tracking.trigger_hardware_after_flysim_max")) {
+				logging::Log("[HARDWARE] Not triggering hardware because takeoff did not occur soon enough after a FlySim trial.");
+				return;
+			}
 		}
 	}
 

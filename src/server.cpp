@@ -54,11 +54,12 @@ void server::Run() {
 	CROW_ROUTE(app, "/api/camera/save")
 		([]() {
 
-		std::string prefix = common::GetTimeStr("./data/manualsave_%Y-%m-%d %H-%M-%S_");
+		std::string prefix = common::GetCommonOutputDirectory() + 
+			common::GetTimeStr("manualsave_%Y-%m-%d %H-%M-%S");
 		
 		hardware::SendTrigger();
 
-		photron::Save(prefix,1,0);
+		photron::Save(prefix, 1,0);
 
 		return CreateCrowResponse("OK");
 	});
@@ -66,7 +67,7 @@ void server::Run() {
 	CROW_ROUTE(app, "/api/hardware/trigger")
 		([]() {
 
-		hardware::SendTrigger();
+		hardware::SendTrigger(true);
 
 		return CreateCrowResponse("OK");
 	});

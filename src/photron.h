@@ -40,5 +40,6 @@ namespace photron {
 	unsigned long SetLiveMode(unsigned long nDeviceNo, unsigned long *nStatus, unsigned long *nErrorCode);
 	unsigned long SetPlaybackMode(unsigned long nDeviceNo, unsigned long *nStatus, unsigned long *nErrorCode);
 	unsigned long SetLutMode(unsigned long nDeviceNo, unsigned long nChildNo, unsigned long nMode, unsigned long *nErrorCode);
+	unsigned long SetExternalInMode(unsigned long deviceNo, unsigned long extInPortNo, unsigned long mode);
 
 }

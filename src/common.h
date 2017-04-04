@@ -15,8 +15,10 @@ namespace common {
 	long long GetTimestamp();
 	std::string GetTimestampStr();
 	std::string GetCommonOutputPrefix();
+	std::string GetCommonOutputDirectory();
 
-	void Save(float startTimeAgo, float endTimeAgo);
+	void Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave = true);
+	void SaveToDisk(bool save);
 
 	typedef struct ImageBuffer {
 		unsigned char* pBuffer;

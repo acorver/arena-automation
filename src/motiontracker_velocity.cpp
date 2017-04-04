@@ -23,6 +23,7 @@ using namespace motion::tracker_velocity;
 std::vector<Body>    bodies;
 int                  nextBodyIndex = 0;
 int                  g_nLastTakeoffFrame = -1;
+unsigned long        g_nPendingDataSaveTriggerFrame = -1;
 
 void ComputeMotionProps(std::deque<PositionHistory> &markers, int offset,
 	int windowSize, float *avgSpeed, float *avgAcceleration, float *avgMarkerNum) {
@@ -53,7 +54,11 @@ void Body::Update() {
 
 	PositionHistory* p = &(this->positionHistory.front());
 	PositionHistory* pt = &(this->positionHistory[_s<int>("tracking.takeoff_detection_velocity_span") - 1]);
-	p->velocity = norm_2(p->position - pt->position) * _s<int>("cortex.fps_analysis") / float(_s<int>("tracking.takeoff_detection_window"));
+	
+	// Use only Z for velocity computation
+	p->velocity = (p->position[2] - pt->position[2]) * _s<int>("cortex.fps_analysis") / float(_s<int>("tracking.takeoff_detection_window"));
+	//p->velocity = norm_2(p->position - pt->position) * _s<int>("cortex.fps_analysis") / float(_s<int>("tracking.takeoff_detection_window"));
+	
 	PositionHistory* ps = &(this->positionHistory[_s<int>("tracking.stationary_detection_window") - 1]);
 
 	// Occasionally, we fully recompute the averages to prevent accumulated floating precision errors
@@ -181,9 +186,11 @@ void motion::ProcessFrame_VelocityThreshold(CortexFrame *pCortexFrame) {
 
 	for (int i = 0; i < bodies.size(); i++) {
 
-		// Delete bodies that haven't been extended with new marker frames for a while
+		// Delete bodies that haven't been extended with new marker frames for a while (except when we have a pending save and want to prevent 
+		// the relevant dragonfly body from being deleted during the evaluation window).
 		if (frameOfData->iFrame - bodies[i].positionHistory.front().iFrame > _s<int>("tracking.max_body_tracking_gap") &&
-			bodies[i].takeOffStartFrame == -1) {
+			bodies[i].takeOffStartFrame == -1 && g_nPendingDataSaveTriggerFrame == -1) {
+
 			bodies.erase(bodies.begin() + i);
 			i -= 1;
 		}
@@ -280,7 +287,44 @@ void motion::ProcessFrame_VelocityThreshold(CortexFrame *pCortexFrame) {
 		}
 	}
 
-	if (allStationary && takeOffStartFrame != -1) {
+	// Process pending data save
+	if (g_nPendingDataSaveTriggerFrame != -1 && frameOfData->iFrame - g_nPendingDataSaveTriggerFrame > _s<int>("tracking.pending_save_num_evaluation_frames")) {
+
+		// Evaluate all body trajectories, and see if anything warrants a save
+		bool saveToDisk = true;
+
+		for (int i = 0; i < bodies.size(); i++) {
+
+			// Whether to save pending data (i.e. high speed footage, and in future potentially other things) to disk or not
+			bool saveBodyToDisk = true;
+
+			// Compute total Z delta
+			float minz = 1e9, maxz = -1e9;
+
+			for (int j = 0; j < bodies[i].positionHistory.size(); j++) {
+				float z = bodies[i].positionHistory[j].position[2];
+				minz = std::min(minz, z);
+				maxz = std::max(maxz, z);
+			}
+
+			// Trigger if this is appropriately large
+			if (maxz - minz < _s<float>("tracking.pending_save_min_z_distance")) {
+				saveBodyToDisk = false;
+			}
+
+			if (!saveBodyToDisk) {
+				saveToDisk = false;
+			}
+		}
+
+		// Process pending data
+		common::SaveToDisk(saveToDisk);
+
+		// Reset
+		g_nPendingDataSaveTriggerFrame = -1;
+
+	// Execute new trigger? :
+	} else if (allStationary && takeOffStartFrame != -1) {
 
 		int takeOffEndFrame = frameOfData->iFrame - _s<int>("tracking.stationary_detection_window");
 
@@ -300,7 +344,13 @@ void motion::ProcessFrame_VelocityThreshold(CortexFrame *pCortexFrame) {
 
 		// Save data from this frame
 		if (g_bMotionTriggerEnabled) {
-			common::Save(startTimeAgo, endTimeAgo);
+
+			common::Trigger(startTimeAgo, endTimeAgo);
+
+			// Indicate pending data save (if enabled)
+			if (_s<bool>("tracking.enable_pending_save")) {
+				g_nPendingDataSaveTriggerFrame = frameOfData->iFrame;
+			}
 		}
 		else {
 			logging::Log("[MOTION] Not saving takeoff as motion triggering is currently disabled.");

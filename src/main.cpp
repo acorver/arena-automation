@@ -62,6 +62,6 @@ int main() {
 	// Join on all threads (prevent program from exiting)
 	t1.join();
 	t2.join();
-	t3.join();
 	t5.join();
+	t3.join();
 }
