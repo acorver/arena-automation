@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{8c5a2992-f9f9-4dcb-872b-b36f48ac5c84}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>plot_performance.py</StartupFile>
+    <StartupFile>process_performance.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>

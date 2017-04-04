@@ -666,7 +666,7 @@ void updateExploreSpace(long elapsedTime) {
 
       g_TimeUntilNextPosition = 6000000;
       
-      targetPositionX += 40;
+      targetPositionX += 50;
       
       /* Reached the end of the line? */
       if (targetPositionX > (g_MinPosX+g_MaxPosX)/2 + 650) {

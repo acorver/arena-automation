@@ -89,7 +89,7 @@ def processFile(fname):
 
     # Go through each telemetry measurement, find a position point that happened within .5 seconds, if so, add to table
     for it, t in zip(range(len(tel)),tel):
-    
+        
         # Get time
         time = t[0]
     
@@ -97,7 +97,8 @@ def processFile(fname):
         a = pos.ix[(pos.t1 < time) & (pos.t2 > time), ['t1','t2','x','z1','z2']]
         
         if a.shape[0] > 0:
-            data.loc[data.shape[0]] = [time,] + a.values.tolist()[0] + t[1:5]
+            if len(t) >= 6:
+                data.loc[data.shape[0]] = [time,] + a.values.tolist()[0] + t[1:5]
     
         if (it%1000)==0: 
             print(str(it) + ", #valid measurements="+str(data.shape[0])) 
