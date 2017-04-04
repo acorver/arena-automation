@@ -11,6 +11,12 @@ data/
 flysim-arduino/archive/
 cortex-listener/
 *.vscode
+*/Debug
+*/Release
+telemetry_assessment/*.zip
+
+# Ignore proprietary MAC/Cortex C++ headers
+analysis/lib/cortex_c/
 
 .Rhistory
 analysis/data/
