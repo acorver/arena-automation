@@ -17,6 +17,8 @@ from postprocessing import extract_perch_locations
 from postprocessing import extract_perching_locations
 from postprocessing import extract_perching_orientations
 from postprocessing import extract_flysim
+from postprocessing import extract_raw_mac_data
+from postprocessing import extract_mac_trigger
 from postprocessing import extract_log_info
 from postprocessing import extract_headmovements
 from postprocessing import create_highspeed_links
@@ -53,6 +55,12 @@ def updateAll(settings):
     
     # After FlySim trajectories have been extracted, we can process perching locations
     p3 = extract_perching_locations.run(async=False, settings = settings)
+    
+    print("Done computing takeoffs, now extracting raw camera data.")
+    p4 = extract_raw_mac_data.run(async = False, settings = settings)
+
+    print("Done extracting raw camera data, now extracting alignment triggers.")
+    extract_mac_trigger.run(settings = settings)
     
     #extract_perching_orientations.run(async=True)
     #extract_headmovements.run()

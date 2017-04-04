@@ -24,7 +24,10 @@ from tkinter import simpledialog
 
 Frame = collections.namedtuple('Frame', 'frame pos vertices trajectory time nearbyVertices')
 
-MocapFrame = collections.namedtuple('MocapFrame', 'frameID yframes unidentifiedVertices')
+MocapFrame = collections.namedtuple('MocapFrame', 'frameID yframes unidentifiedVertices centroids')
+
+RawFrame = collections.namedtuple('RawFrame', 'cameraID width height centroids')
+Centroid = collections.namedtuple('Centroid', 'x y q')
 
 ExtractionSettings = collections.namedtuple('ExtractionSettings', 'files groupOutputByDay')
 
@@ -114,8 +117,17 @@ def iterMocapFrames(file, nearbyVertexRange=None):
                     
                         unidentifiedVertices.append(pos)
                 
+                # Parse centroids, if they have been added to this data file...
+                centroids = {}
+                
+                if len(x) >= 6:
+                    for c in x[6]:
+                        cs = [Centroid(y[0], y[1], y[2]) for y in c[3]]
+                        rf = RawFrame(c[0], c[1], c[2], cs)
+                        centroids[rf.cameraID] = rf
+                
                 # Done!
-                yield MocapFrame(iframe, yframes, unidentifiedVertices)
+                yield MocapFrame(iframe, yframes, unidentifiedVertices, centroids)
     else:
         raise Exception("Motion capture data format not supported: " + file)
 

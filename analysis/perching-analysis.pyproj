@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{76b3e4b1-9cd1-4076-a48b-7f13f62bc0b8}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>auto_updater.py</StartupFile>
+    <StartupFile>postprocessing\extract_mac_trigger_frames.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -27,7 +27,16 @@
     <Compile Include="df_reports\__init__.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="lib\cortex.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="postprocessing\create_highspeed_links.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_mac_trigger_frames.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_raw_mac_data.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="shared\util.py">
@@ -71,6 +80,7 @@
     <Folder Include="df_reports\" />
     <Folder Include="df_reports\templates\" />
     <Folder Include="df_reports\templates\static\" />
+    <Folder Include="lib\" />
     <Folder Include="shared\" />
     <Folder Include="postprocessing\" />
   </ItemGroup>
