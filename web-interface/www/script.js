@@ -732,8 +732,7 @@ arenaApp.controller('camerasController', function($scope, $rootScope, $http) {
         $http.get($rootScope.host.ip+'/api/hardware/trigger').then(function(response){}, function(response){});
         return false;
     };
-
-    /*
+    
     setInterval(function(){
         for (var i = 0; i < $scope.cameras.length; i++) {
             image = new Image();
@@ -748,7 +747,6 @@ arenaApp.controller('camerasController', function($scope, $rootScope, $http) {
             }
         }
     }, 1000);
-    */
 
     for (var type in $scope.cameras) {
         for (var cameraID in $scope.cameras[type]) {
