@@ -1,5 +1,4 @@
 #include "stdafx.h"
-
 #include "settings.h"
 
 json g_Settings;

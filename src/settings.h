@@ -1,7 +1,5 @@
 #pragma once
 
-#include "common.h"
-
 #define CORTEX_INVALID_MARKER 9999999
 
 extern std::map<std::string, json> g_SettingsMap;

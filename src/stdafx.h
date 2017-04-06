@@ -61,3 +61,6 @@ using json = nlohmann::json;
 
 #include <linalg/linalg.h>
 #define PI 3.14159265358979323846
+
+#include <cpr/cpr.h>
+

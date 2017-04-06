@@ -54,7 +54,9 @@ int main() {
 
 	// Attempt to initialize photron cameras
 	if (settings::GetSettings()["settings"]["photron"]["enabled"] ) {
-		nResult = photron::Init(&t3);
+		if (!_s<bool>("photron.use_clients")) {
+			nResult = photron::Init(&t3);
+		}
 	}
 
 	// TODO: Auto-spawn browser window...

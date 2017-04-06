@@ -59,7 +59,7 @@ void server::Run() {
 		
 		hardware::SendTrigger();
 
-		photron::Save(prefix, 1,0);
+		common::SaveToDisk(true);
 
 		return CreateCrowResponse("OK");
 	});

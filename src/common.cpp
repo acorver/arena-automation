@@ -65,6 +65,19 @@ std::string common::GetTimeStr(const char* pattern) {
 	return std::string(ss.str());
 }
 
+// Get the current timestamp
+long long common::GetTimestamp() {
+	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+// Get the current timestamp as a string
+std::string common::GetTimestampStr() {
+	long long x = common::GetTimestamp();
+	char str[64];
+	sprintf(str, "%lld", x);
+	return std::string(str);
+}
+
 // Get a shared output file prefix for all data files
 std::string common::GetCommonOutputPrefix() {
 
@@ -85,19 +98,6 @@ std::string common::GetCommonOutputDirectory() {
 	boost::system::error_code err;
 	int i = boost::replace_all_copy(g_CommonOutputPrefix, "\\", "/").rfind('/');
 	return g_CommonOutputPrefix.substr(0, i+1);
-}
-
-// Get the current timestamp
-long long common::GetTimestamp() {
-	return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-}
-
-// Get the current timestamp as a string
-std::string common::GetTimestampStr() {
-	long long x = common::GetTimestamp();
-	char str[64];
-	sprintf(str, "%lld", x);
-	return std::string(str);
 }
 
 // Save data to file
@@ -158,12 +158,40 @@ void common::SaveToDisk(bool save) {
 	}
 
 	// Save high-speed camera data (or not, and simply reset the system)
-	if (photron::IsInitialized()) {
-		if (save) {
-			photron::Save(g_LastTriggerPrefix, g_LastTriggerStartTimeAgo, g_LastTriggerEndTimeAgo);
+	if (_s<bool>("photron.use_clients")) {
+		
+		// Send messages to each client
+		for (int clientID = 0; clientID < 1024; clientID++) {
+
+			std::string prefixEncoded = boost::replace_all_copy( 
+				boost::replace_all_copy(g_LastTriggerPrefix, " ", "%20"), "/", "%3f");
+			
+			std::string sIP = std::string("photron.client_") + std::to_string(clientID) + std::string(".client_ip");
+			std::string sPort = std::string("photron.client_") + std::to_string(clientID) + std::string(".port");
+			
+			if (_ss<std::string>(sIP.c_str()) == "") {
+				break;
+			} else {
+				std::string command = std::string("http://") + _s<std::string>(sIP.c_str()) + std::string(":") +
+					std::to_string(_s<int>(sPort.c_str())) + std::string("/save/") + prefixEncoded + std::string("/") + 
+					std::string(save?"save":"abortsave") + std::string("/-1/0");
+			
+				cpr::Response r = cpr::Get(cpr::Url{ command.c_str() });
+
+				r.status_code;                  // 200
+				//r.header["content-type"];       // application/json; charset=utf-8
+				//r.text;                         // JSON text string
+			}
 		}
-		else {
-			photron::StartRecording();
+
+	} else {
+		if (photron::IsInitialized()) {
+			if (save) {
+				photron::Save(g_LastTriggerPrefix, g_LastTriggerStartTimeAgo, g_LastTriggerEndTimeAgo);
+			}
+			else {
+				photron::StartRecording();
+			}
 		}
 	}
 }
