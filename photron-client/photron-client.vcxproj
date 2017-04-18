@@ -41,13 +41,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v140_xp</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v140_xp</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -74,8 +74,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(SolutionDir)..\lib\cpr\include;$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\;$(IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
-    <LibraryPath>$(SolutionDir)..\lib\ffmpeg_lib;$(SolutionDir)..\lib\videoInput\;$(SolutionDir)..\lib\opencv3\x64\vc14\lib;$(UniversalCRT_LibraryPath_x64);$(WindowsSDKDir)lib\x64;$(SolutionDir)..\lib\boost_lib\;$(SolutionDir)..\lib\;C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir);$(SolutionDir)..\lib\cpr\include;$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(IncludePath);$(SolutionDir)..\lib\;$(UniversalCRT_IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
+    <LibraryPath>$(WindowsSDKDir)lib\x64;$(SolutionDir)..\lib\boost_lib\;$(SolutionDir)..\lib\cpr_lib\$(Configuration);$(SolutionDir)..\lib\ffmpeg_lib;$(SolutionDir)..\lib\videoInput\;$(SolutionDir)..\lib\videoInput\glfw;$(SolutionDir)..\lib\videoInput\DShow\lib;$(LibraryPath);$(SolutionDir)..\lib\</LibraryPath>
     <IntDir>$(SolutionDir)..\build\photron-client\intermediate\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)..\build\photron-client\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
@@ -84,8 +84,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(SolutionDir);$(SolutionDir)..\lib\cpr\include;$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(UniversalCRT_IncludePath_x64);$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\;$(IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
-    <LibraryPath>$(SolutionDir)..\lib\ffmpeg_lib;$(SolutionDir)..\lib\videoInput\;$(SolutionDir)..\lib\opencv3\x64\vc14\lib;$(UniversalCRT_LibraryPath_x64);$(WindowsSDKDir)lib\x64;$(SolutionDir)..\lib\boost_lib\;$(SolutionDir)..\lib\;C:\Program Files (x86)\Windows Kits\8.1\Lib\winv6.3\um\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir);$(SolutionDir)..\lib\cpr\include;$(SolutionDir)..\lib\ffmpeg;$(SolutionDir)..\lib\msgpack;$(IncludePath);$(SolutionDir)..\lib\;$(UniversalCRT_IncludePath);$(SolutionDir)..\lib\videoInput\DShow\Include;$(SolutionDir)..\lib\videoInput\extra;$(SolutionDir)..\lib\opencv3\include;$(SolutionDir)..\lib\videoInput\glfw</IncludePath>
+    <LibraryPath>$(WindowsSDKDir)lib\x64;$(SolutionDir)..\lib\boost_lib\;$(SolutionDir)..\lib\cpr_lib\$(Configuration);$(SolutionDir)..\lib\ffmpeg_lib;$(SolutionDir)..\lib\videoInput\;$(SolutionDir)..\lib\videoInput\glfw;$(SolutionDir)..\lib\videoInput\DShow\lib;$(WindowsSDKDir)lib;$(LibraryPath);$(SolutionDir)..\lib\</LibraryPath>
     <IntDir>$(SolutionDir)..\build\photron-client\intermediate\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)..\deploy\</OutDir>
   </PropertyGroup>
@@ -114,7 +114,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;dxguid.lib;ole32.lib;strmiids.lib;uuid.lib;</AdditionalDependencies>
+      <AdditionalDependencies>avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;ole32.lib;strmiids.lib;uuid.lib;cpr.lib;libcurl_imp.lib;videoInputD.lib;NIDAQmx.lib;Cortex_SDK.lib;PDCLIB.lib;opencv_world310d.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -150,7 +150,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;dxguid.lib;ole32.lib;strmiids.lib;uuid.lib;</AdditionalDependencies>
+      <AdditionalDependencies>avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;ole32.lib;strmiids.lib;uuid.lib;cpr.lib;libcurl_imp.lib;videoInput.lib;Cortex_SDK.lib;PDCLIB.lib;opencv_world310.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

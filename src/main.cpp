@@ -57,6 +57,11 @@ int main() {
 		if (!_s<bool>("photron.use_clients")) {
 			nResult = photron::Init(&t3);
 		}
+		else {
+			for (int clientID = 0; clientID < 1024; clientID++) {
+				if (!photron::AttemptToStartClient(clientID)) { break; }
+			}
+		}
 	}
 
 	// TODO: Auto-spawn browser window...

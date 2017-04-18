@@ -318,7 +318,7 @@ void motion::ProcessFrame_VelocityThreshold(CortexFrame *pCortexFrame) {
 		}
 
 		// Process pending data
-		common::SaveToDisk(saveToDisk);
+		common::SaveToDisk(saveToDisk, "");
 
 		// Reset
 		g_nPendingDataSaveTriggerFrame = -1;
@@ -345,11 +345,13 @@ void motion::ProcessFrame_VelocityThreshold(CortexFrame *pCortexFrame) {
 		// Save data from this frame
 		if (g_bMotionTriggerEnabled) {
 
-			common::Trigger(startTimeAgo, endTimeAgo);
+			bool triggerSuccessful = common::Trigger(startTimeAgo, endTimeAgo);
 
 			// Indicate pending data save (if enabled)
-			if (_s<bool>("tracking.enable_pending_save")) {
-				g_nPendingDataSaveTriggerFrame = frameOfData->iFrame;
+			if (triggerSuccessful) {
+				if (_s<bool>("tracking.enable_pending_save")) {
+					g_nPendingDataSaveTriggerFrame = frameOfData->iFrame;
+				}
 			}
 		}
 		else {

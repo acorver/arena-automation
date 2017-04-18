@@ -28,8 +28,61 @@ bool photron::IsInitialized() {
 }
 
 // ============================================================================
-// Name: GetStatus
-// Desc: 
+// Request number of busy photrons
+// ============================================================================
+
+int photron::NumberBusy() {
+	return numPhotronRetrieving;
+}
+void photron::AddBusy() {
+	numPhotronRetrieving += 1;
+}
+void photron::AddNonBusy() {
+	numPhotronRetrieving -= 1;
+}
+
+// ============================================================================
+// Attempt to start Photron client
+// ============================================================================
+
+bool photron::AttemptToStartClient(int clientID) {
+
+	std::string sAutostart = std::string("photron.client_") +
+	std::to_string(clientID) + std::string(".autostart_from_main_application");
+	std::string sIP = std::string("photron.client_") +
+	std::to_string(clientID) + std::string(".client_ip");
+	
+	if (_ss<std::string>(sIP.c_str()) == "") { 
+		return false;
+	}
+	
+	if (_s<bool>(sAutostart.c_str())) {
+
+		// Autostart this client on this computer
+		//std::string cmd = std::string("photron-client.exe ") + std::to_string(clientID);
+		
+		// system(...) joins the process to the thread... this could be used, but would require additional 
+		// thread management... for now, we use Window's CreateProcess function instead
+		// system(cmd.c_str());
+
+		// 
+		STARTUPINFOA si;
+		PROCESS_INFORMATION pi;
+		char cmd[4096];
+
+		memset(&si, 0, sizeof(STARTUPINFOA));
+		memset(&pi, 0, sizeof(PROCESS_INFORMATION));
+		memset(cmd, 0, sizeof(char) * 4096);
+		sprintf(cmd, "%s", (std::string("photron-client.exe ") + std::to_string(clientID)).c_str());
+		
+		CreateProcessA(NULL, cmd, NULL, NULL, FALSE, NORMAL_PRIORITY_CLASS | CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT, NULL, NULL, &si, &pi);
+	}
+
+	return true;
+}
+
+// ============================================================================
+// GetStatus
 // ============================================================================
 
 unsigned long photron::GetStatus(unsigned long nDeviceNo) {

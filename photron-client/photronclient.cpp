@@ -111,19 +111,31 @@ void photronclient::StartServer() {
 		return CreateCrowResponse("OK");
 	});
 
+	CROW_ROUTE(app, "/camera_count")
+		([]() {
+		
+		return CreateCrowResponse(std::to_string(cameraInfo.size()).c_str());
+	});
+
 	CROW_ROUTE(app, "/live/<int>/<int>")
 		([](int camera, int unused) {
 
 		return CreateCrowResponse(photronclient::GetLiveImage(camera));
 	});
 
-	CROW_ROUTE(app, "/save/<string>/<float>/<float>")
-		([](std::string prefixEncoded, float startTimeAgo, float endTimeAgo) {
+	CROW_ROUTE(app, "/save/<string>/<string>/<float>/<float>")
+		([](std::string prefixEncoded, std::string doSave, float startTimeAgo, float endTimeAgo) {
 
 		// Decode prefix string
 		std::string prefix = boost::replace_all_copy(boost::replace_all_copy(prefixEncoded, "%20", " "), "%2f", "/");
 
-		photronclient::Save(prefix, startTimeAgo, endTimeAgo);
+		if (doSave == "save") {
+			photronclient::Save(prefix, startTimeAgo, endTimeAgo);
+		} else {
+			std::ofstream of(prefix);
+			of << std::endl;
+			of.close();
+		}
 
 		return CreateCrowResponse("OK");
 	});
@@ -137,12 +149,6 @@ void photronclient::StartServer() {
 }
 
 // ================================================================================================
-// Initialize Photron library
-// ================================================================================================
-
-
-
-// ================================================================================================
 // Entry point
 // ================================================================================================
 
@@ -152,10 +158,15 @@ int main(int argc, char** argv) {
 		exit(1);
 	}
 
+	photronclient::Log("Starting Photron Client %s.", argv[1]);
+
 	g_nClientID = atoi(argv[1]);
 
 	// Initialize settings
 	settings::Init();
+
+	// Connect to Photrons
+	photronclient::Init(&g_LiveUpdateThread);
 
 	// Start the web server to communicate with other processes
 	boost::thread t1(photronclient::StartServer);
@@ -630,7 +641,7 @@ int photronclient::Init(boost::thread* pThread) {
 	}
 
 	// Detect cameras
-	while (DetectNumInfo.m_nDeviceNum != _s<int>("photron.camera_count")) {
+	while (DetectNumInfo.m_nDeviceNum < _s<int>("photron.camera_count")) {
 		nRet = PDC_DetectDevice(
 			PDC_INTTYPE_G_ETHER, /* Gigabit-Ether I/F */
 			IPList,             /* IP address */
@@ -642,11 +653,12 @@ int photronclient::Init(boost::thread* pThread) {
 		// Check status
 		if (nRet == PDC_FAILED) {
 			photronclient::Log("[CAMERA] PDC_DetectDevice Error %d", nErrorCode);
-			return 1;
 		}
 		else {
 			photronclient::Log("[CAMERA] Detected %d cameras.", DetectNumInfo.m_nDeviceNum);
 		}
+
+		boost::this_thread::sleep_for(boost::chrono::milliseconds(1000));
 	}
 
 	// Open all devices
@@ -665,15 +677,24 @@ int photronclient::Init(boost::thread* pThread) {
 		}
 
 		// Open device
-		nRet = PDC_OpenDevice(
-			&(DetectNumInfo.m_DetectInfo[i]), /* Object device information */
-			&(nDeviceNos[i]),			      /* Device number */
-			&nErrorCode);
+		for (int attempt = 0; attempt < 50; attempt++) {
+			nRet = PDC_OpenDevice(
+				&(DetectNumInfo.m_DetectInfo[i]), /* Object device information */
+				&(nDeviceNos[i]),			      /* Device number */
+				&nErrorCode);
 
-		// Check for errors during opening of device
-		if (nRet == PDC_FAILED) {
-			photronclient::Log("[CAMERA] PDC_OpenDeviceError %d", nErrorCode);
-			return 1;
+			// Check for errors during opening of device
+			if (nRet == PDC_FAILED) {
+				photronclient::Log("[CAMERA] PDC_OpenDeviceError %d", nErrorCode);
+
+				if (attempt == 50) {
+					return 1;
+				}
+
+				boost::this_thread::sleep_for(boost::chrono::milliseconds(1000));
+			} else {
+				break;
+			}
 		}
 
 		// get the child device
@@ -715,7 +736,7 @@ int photronclient::Init(boost::thread* pThread) {
 	// Exit if there are no such cameras
 	if (cameraInfo.size() == 0) {
 		photronclient::Log("No cameras associated with this client number found, exiting...");
-		exit(1);
+		return 1;
 	}
 
 	// Configure cameras
@@ -1261,9 +1282,13 @@ void photronclient::Save(std::string prefix, float startTimeAgo, float endTimeAg
 			// Allocate image buffer
 			std::ptrdiff_t nByteSize = std::ptrdiff_t(1024 * 1024) * std::ptrdiff_t(iEndFrame + 2 - iStartFrame); // Should this be iEndFrame+1 or +2?
 
-																												  // Get filename
-			std::string fileStr = prefix + common::toStr("_%d_%d.photron.avi",
-				cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c]);
+			// Get IP address of photron
+			unsigned long ipAddrTarget = _s<int>((std::string("photron.client_") +
+				std::to_string(g_nClientID) + std::string(".photron_ip")).c_str());
+
+			// Create filename
+			std::string fileStr = prefix + common::toStr("_%d_%d_%d.photron.avi",
+				ipAddrTarget, cameraInfo[i].nDeviceNo, cameraInfo[i].nChildNos[c]);
 
 			// Save to file on separate thread!
 			numPhotronRetrieving++;

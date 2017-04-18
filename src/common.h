@@ -17,8 +17,8 @@ namespace common {
 	std::string GetCommonOutputPrefix();
 	std::string GetCommonOutputDirectory();
 
-	void Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave = true);
-	void SaveToDisk(bool save);
+	bool Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave = true);
+	void SaveToDisk(bool save, const char* prefix);
 
 	typedef struct ImageBuffer {
 		unsigned char* pBuffer;

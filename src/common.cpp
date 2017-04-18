@@ -115,12 +115,20 @@ void _Save(float startTimeAgo, float endTimeAgo) {
 }
 
 // Trigger all data sources
-void common::Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave) {
+bool common::Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave) {
+
+	// Optionally, only allow trigger if photrons are availble
+	if (_s<bool>("tracking.trigger_requires_photrons_ready")) {
+		if (photron::NumberBusy() > 0) {
+			logging::Log("[HARDWARE] Could not send hardware trigger --- Photrons not ready...");
+			return false;
+		}
+	}
 
 	// Is there currently a conflicting trigger queued? If so, don't trigger
 	if (g_LastTriggerPrefix != "") {
 		logging::Log("[HARDWARE] Could not send hardware trigger --- other trigger in progress...");
-		return;
+		return  false;
 	}
 
 	// Trigger recording!!
@@ -142,11 +150,14 @@ void common::Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave
 
 	// For code that doesn't want to support handling pending saves, we immediately save everything to disk
 	if (!allowPendingSave) {
-		common::SaveToDisk(true);
+		common::SaveToDisk(true, "");
 	}
+
+	// Successfully triggered
+	return true;
 }
 
-void common::SaveToDisk(bool save) {
+void common::SaveToDisk(bool save, const char* prefix) {
 
 	// Note: This function can be called separately to decide whether to actually commit the triggered data 
 	// to memory
@@ -163,8 +174,11 @@ void common::SaveToDisk(bool save) {
 		// Send messages to each client
 		for (int clientID = 0; clientID < 1024; clientID++) {
 
+			const char* pref = (prefix != ""?prefix:g_LastTriggerPrefix.c_str());
+
 			std::string prefixEncoded = boost::replace_all_copy( 
-				boost::replace_all_copy(g_LastTriggerPrefix, " ", "%20"), "/", "%3f");
+				boost::replace_all_copy(boost::replace_all_copy(
+					std::string(pref), "\\", "/"), " ", "%20"), "/", "%2f");
 			
 			std::string sIP = std::string("photron.client_") + std::to_string(clientID) + std::string(".client_ip");
 			std::string sPort = std::string("photron.client_") + std::to_string(clientID) + std::string(".port");
@@ -176,11 +190,26 @@ void common::SaveToDisk(bool save) {
 					std::to_string(_s<int>(sPort.c_str())) + std::string("/save/") + prefixEncoded + std::string("/") + 
 					std::string(save?"save":"abortsave") + std::string("/-1/0");
 			
-				cpr::Response r = cpr::Get(cpr::Url{ command.c_str() });
+				boost::thread t([](std::string cmd) {
+					cpr::GetCallback([](cpr::Response r) {
 
-				r.status_code;                  // 200
-				//r.header["content-type"];       // application/json; charset=utf-8
-				//r.text;                         // JSON text string
+						// Currently, it is unclear if the system returns after the save, or when the device is actually ready...
+						// Temporarily, we therefore wait another 2 seconds...
+						// TODO: Clear up this issue...
+						boost::this_thread::sleep_for(boost::chrono::milliseconds(2000));
+
+						// Signal that this Photron is ready
+						photron::AddNonBusy();
+
+						// Signal if all Photrons are ready
+						if (photron::NumberBusy() == 0) {
+							logging::Log("[PHOTRON] All photrons ready!");
+						}
+
+					}, cpr::Url{ cmd.c_str() });
+				}, command);
+
+				photron::AddBusy();
 			}
 		}
 

@@ -28,9 +28,15 @@ namespace photron {
 
 	unsigned long SoftwareTrigger();
 
+	bool AttemptToStartClient(int clientID);
+
 	void Save(std::string prefix, float startTimeAgo, float endTimeAgo);
 
 	std::string GetLiveImage(int index);
+
+	int  NumberBusy();
+	void AddBusy();
+	void AddNonBusy();
 
 	/* ========================================================================
 	   Photron helper function 
