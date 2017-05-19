@@ -12,6 +12,8 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 from scipy import interpolate
+import pickle
+import sqlite3
 
 import tkinter as tk
 from tkinter import filedialog
@@ -24,7 +26,7 @@ from tkinter import simpledialog
 
 Frame = collections.namedtuple('Frame', 'frame pos vertices trajectory time nearbyVertices')
 
-MocapFrame = collections.namedtuple('MocapFrame', 'frameID yframes unidentifiedVertices centroids')
+MocapFrame = collections.namedtuple('MocapFrame', 'byteOffset frameID time yframes unidentifiedVertices centroids')
 
 RawFrame = collections.namedtuple('RawFrame', 'cameraID width height centroids')
 Centroid = collections.namedtuple('Centroid', 'x y q')
@@ -32,6 +34,18 @@ Centroid = collections.namedtuple('Centroid', 'x y q')
 ExtractionSettings = collections.namedtuple('ExtractionSettings', 'files groupOutputByDay')
 
 CORTEX_NAN = 9999999
+
+# =======================================================================================
+# Helper class
+# =======================================================================================
+
+# Source: https://github.com/msgpack/msgpack-python/issues/76
+class StreamCounter(object):
+    __slots__ = ('nbytes',)
+    def __init__(self):
+        self.nbytes = 0
+    def __call__(self, s):
+        self.nbytes += len(s)
 
 # =======================================================================================
 # Ask for post-processing input files
@@ -54,80 +68,286 @@ def askForExtractionSettings():
     
     return ExtractionSettings(files, False)
 
+# =======================================================================================
+# Build an index for a mocap file
+# =======================================================================================
+
+def buildMocapIndex(file, verbose=False):
+    ofile = file.replace('.msgpack','.msgpack.index')
+    i = 0
+    if not file.endswith('.msgpack'):
+        raise Exception("Mocap data has to be in .msgpack format.")
+    elif os.path.exists(ofile):
+        raise Exception("Mocap index already exists.")
+    else:
+        conn = sqlite3.connect(ofile)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE idx
+                (frameID integer PRIMARY KEY, offset integer)''')
+        c.execute('CREATE INDEX i1 ON idx (frameID)')
+        conn.commit()
+        
+        buf = []
+        curOffset = 0
+        for frame in iterMocapFrames(file):
+            buf.append( (frame.frameID, curOffset) )            
+            curOffset = frame.byteOffset
+            
+            i += 1
+            if (i % 100000) == 0:
+                c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
+                conn.commit()
+                buf = []
+                if verbose:
+                    print("Processed "+str(i))
+        
+        c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
+        conn.commit()
+        conn.close()
 
 # =======================================================================================
-# Read Yframes and return the parsed structure (use this as iterator in for loop)
+# Iterator for Yframes and return the parsed structure... 
 # =======================================================================================
 
-def iterMocapFrames(file, nearbyVertexRange=None):
+# This function currently parses the .msgpack file format
+#    o This file format was used for data files between ~August 2016 - present...
+#    o In the future, we may switch to another data format, in which case this function 
+#      can simply be expanded, without having to change other functions.
+
+class MocapFrameIterator:
+    def __init__(self, file, nearbyVertexRange=None, startFrame=None, endFrame=None, numFrames=None):
+        self.counter = StreamCounter()
+        self.numFramesYielded = 0
+        self.startFrame = startFrame
+        self.endFrame = endFrame
+        self.numFrames = numFrames
+        self.nearbyVertexRange = nearbyVertexRange
+
+        if file.endswith('.msgpack'):
+
+            # Open the data file
+            self.f = open(file,'rb')
+
+            # If a start frame is requested, look it up in the index
+            if startFrame != None:
+                fileIdx = file.replace('.msgpack','.msgpack.index')
+                if not os.path.exists(fileIdx):
+                    # Auto-build necessary index if it doesn't exist
+                    buildMocapIndex(file)
+                
+                # Seek to right point in file
+                conn = sqlite3.connect(fileIdx)
+                c = conn.cursor()
+                s = [x for x in c.execute(
+                    'select frameID, offset from idx where frameID <= ? order by frameID DESC limit 2', 
+                        (int(startFrame),))]
+                # Note: This code above has been found not to work when type(startFrame)==np.int64...
+                #       We're therefore forcing 'int' type here!
+                conn.close()
+                if len(s) == 0:
+                    raise Exception("Start frame specified, but no frameID <= requested frame found... \n" + 
+                        "Tried query: 'select frameID, offset from idx where frameID <= "+str(startFrame)+" order by frameID desc limit 1'")
+                else:
+                    self.f.seek(s[0][1])
+            
+            self.unpacker = msgpack.Unpacker(self.f)
+        else:
+            raise Exception("Mocap Frame Iterator currently only parses .msgpack files.")
+    
+    def __iter__(self):
+        return self
+
+    def stopIteration(self):
+        self.f.close()
+        raise StopIteration
+    
+    def __next__(self):
+        try:
+            x = self.unpacker.unpack(write_bytes=self.counter)
+                    
+            iframe = x[0]
+            yframes = []
+            unidentifiedVertices = []
+            
+            # Get time if it exists (older files don't have a time field)
+            timestamp = x[5] if len(x)>=6 else 0        
+                           
+            byteOffset = self.counter.nbytes
+                
+            if self.endFrame != None and iframe >= self.endFrame:
+                self.stopIteration()
+
+            if not isinstance(x, int):
+                    
+                # Parse ID'ed markers
+                for b in x[2]:
+                    if 'Yframe' in b[0].decode():
+                        vertices = np.array([[z if z!=CORTEX_NAN else 
+                            float('NaN') for z in y] for y in b[1]])
+
+                        # Continue if all vertices are NaN
+                        if np.all(vertices!=vertices): continue
+
+                        pos = np.nanmean(vertices, axis=0)
+                    
+                        # Optionally get nearby vertices
+                        nearbyVertices = None
+                        if self.nearbyVertexRange != None:
+                            nearbyVertices = []
+                            for c in x[3]:
+                                # Get vertex
+                                v = np.array([z if z!=CORTEX_NAN else 
+                                    float('NaN') for z in c])
+                                # Don't accept markers with any NaN's at this point
+                                if not np.any(v!=v):
+                                    # Only proceed if this vertex is close enough
+                                    if np.linalg.norm(v - pos) < self.nearbyVertexRange:
+                                        nearbyVertices.append(v)
+                                    
+                        # Pass data to processing function
+                        yframes.append( Frame(frame=iframe, vertices=vertices, pos=pos, 
+                            trajectory=-1, time=timestamp, nearbyVertices=nearbyVertices) )
+    
+                # Parse unID'ed markers
+                for b in x[3]:
+                    pos = np.array([z if z!=CORTEX_NAN else float('NaN') for z in b])
+                        
+                    # Continue if all vertices are NaN
+                    if np.all(pos!=pos): continue
+                    
+                    unidentifiedVertices.append(pos)
+                
+            # Parse centroids, if they have been added to this data file...
+            centroids = {}
+                
+            if len(x) >= 7:
+                for c in x[6]:
+                    cs = [Centroid(y[0], y[1], y[2]) for y in c[3]]
+                    rf = RawFrame(c[0], c[1], c[2], cs)
+                    centroids[rf.cameraID] = rf
+                
+            # Done!
+            if self.numFrames == None or self.numFramesYielded < self.numFrames:
+                return MocapFrame(byteOffset, iframe, timestamp, yframes, unidentifiedVertices, centroids)
+                self.numFramesYielded += 1
+            else:
+                self.stopIteration()
+        except msgpack.OutOfData:
+            self.stopIteration()
+
+# =======================================================================================
+# [DEPRECATED] Read Yframes and return the parsed structure (use this as iterator in for loop) 
+# =======================================================================================
+
+def iterMocapFrames(file, nearbyVertexRange=None, startFrame=None, endFrame=None, numFrames=None):
     
     # Parse .msgpack file format
     #    o This file format was used for data files between ~August 2016 - present...
     #    o In the future, we may switch to another data format, in which case this function 
     #      can simply be expanded, without having to change other functions.
     
+    counter = StreamCounter()
+    numFramesYielded = 0
+
     if file.endswith('.msgpack'):
         with open(file,'rb') as f:
-            for x in msgpack.Unpacker(f):
+            
+            # If a start frame is requested, look it up in the index
+            if startFrame != None:
+                fileIdx = file.replace('.msgpack','.msgpack.index')
+                if not os.path.exists(fileIdx):
+                    # Auto-build necessary index if it doesn't exist
+                    buildMocapIndex(file)
                 
-                iframe = x[0]
-                yframes = []
-                unidentifiedVertices = []
+                # Seek to right point in file
+                conn = sqlite3.connect(fileIdx)
+                c = conn.cursor()
+                s = [x for x in c.execute(
+                    'select frameID, offset from idx where frameID <= ? order by frameID DESC limit 2', 
+                        (int(startFrame),))]
+                # Note: This code above has been found not to work when type(startFrame)==np.int64...
+                #       We're therefore forcing 'int' type here!
+                conn.close()
+                if len(s) == 0:
+                    raise Exception("Start frame specified, but no frameID <= requested frame found... \n" + 
+                        "Tried query: 'select frameID, offset from idx where frameID <= "+str(startFrame)+" order by frameID desc limit 1'")
+                else:
+                    f.seek(s[0][1])
+            
+            unpacker = msgpack.Unpacker(f)
+            while True:
+                try:
+                    x = unpacker.unpack(write_bytes=counter)
+                    
+                    iframe = x[0]
+                    yframes = []
+                    unidentifiedVertices = []
                 
-                if not isinstance(x, int):
-                    
-                    # Parse ID'ed markers
-                    for b in x[2]:
-                        if 'Yframe' in b[0].decode():
-                            vertices = np.array([[z if z!=CORTEX_NAN else 
-                                float('NaN') for z in y] for y in b[1]])
+                    byteOffset = counter.nbytes
+                
+                    if endFrame != None and iframe >= endFrame:
+                        break
 
-                            # Continue if all vertices are NaN
-                            if np.all(vertices!=vertices): continue
+                    if not isinstance(x, int):
+                    
+                        # Parse ID'ed markers
+                        for b in x[2]:
+                            if 'Yframe' in b[0].decode():
+                                vertices = np.array([[z if z!=CORTEX_NAN else 
+                                    float('NaN') for z in y] for y in b[1]])
 
-                            pos = np.nanmean(vertices, axis=0)
+                                # Continue if all vertices are NaN
+                                if np.all(vertices!=vertices): continue
+
+                                pos = np.nanmean(vertices, axis=0)
                     
-                            # Get time if it exists (older files don't have a time field)
-                            t = x[5] if len(x)>=6 else 0
+                                # Get time if it exists (older files don't have a time field)
+                                t = x[5] if len(x)>=6 else 0
                     
-                            # Optionally get nearby vertices
-                            nearbyVertices = None
-                            if nearbyVertexRange != None:
-                                nearbyVertices = []
-                                for c in x[3]:
-                                    # Get vertex
-                                    v = np.array([z if z!=CORTEX_NAN else 
-                                        float('NaN') for z in c])
-                                    # Don't accept markers with any NaN's at this point
-                                    if not np.any(v!=v):
-                                        # Only proceed if this vertex is close enough
-                                        if np.linalg.norm(v - pos) < nearbyVertexRange:
-                                            nearbyVertices.append(v)
+                                # Optionally get nearby vertices
+                                nearbyVertices = None
+                                if nearbyVertexRange != None:
+                                    nearbyVertices = []
+                                    for c in x[3]:
+                                        # Get vertex
+                                        v = np.array([z if z!=CORTEX_NAN else 
+                                            float('NaN') for z in c])
+                                        # Don't accept markers with any NaN's at this point
+                                        if not np.any(v!=v):
+                                            # Only proceed if this vertex is close enough
+                                            if np.linalg.norm(v - pos) < nearbyVertexRange:
+                                                nearbyVertices.append(v)
                                     
-                            # Pass data to processing function
-                            yframes.append( Frame(frame=iframe, vertices=vertices, pos=pos, 
-                                trajectory=-1, time=t, nearbyVertices=nearbyVertices) )
+                                # Pass data to processing function
+                                yframes.append( Frame(frame=iframe, vertices=vertices, pos=pos, 
+                                    trajectory=-1, time=t, nearbyVertices=nearbyVertices) )
     
-                    # Parse unID'ed markers
-                    for b in x[3]:
-                        pos = np.array([z if z!=CORTEX_NAN else float('NaN') for z in b])
+                        # Parse unID'ed markers
+                        for b in x[3]:
+                            pos = np.array([z if z!=CORTEX_NAN else float('NaN') for z in b])
                         
-                        # Continue if all vertices are NaN
-                        if np.all(pos!=pos): continue
+                            # Continue if all vertices are NaN
+                            if np.all(pos!=pos): continue
                     
-                        unidentifiedVertices.append(pos)
+                            unidentifiedVertices.append(pos)
                 
-                # Parse centroids, if they have been added to this data file...
-                centroids = {}
+                    # Parse centroids, if they have been added to this data file...
+                    centroids = {}
                 
-                if len(x) >= 6:
-                    for c in x[6]:
-                        cs = [Centroid(y[0], y[1], y[2]) for y in c[3]]
-                        rf = RawFrame(c[0], c[1], c[2], cs)
-                        centroids[rf.cameraID] = rf
+                    if len(x) >= 7:
+                        for c in x[6]:
+                            cs = [Centroid(y[0], y[1], y[2]) for y in c[3]]
+                            rf = RawFrame(c[0], c[1], c[2], cs)
+                            centroids[rf.cameraID] = rf
                 
-                # Done!
-                yield MocapFrame(iframe, yframes, unidentifiedVertices, centroids)
+                    # Done!
+                    if numFrames == None or numFramesYielded < numFrames:
+                        yield MocapFrame(byteOffset, iframe, yframes, unidentifiedVertices, centroids)
+                        numFramesYielded += 1
+                    else:
+                        return
+                except msgpack.OutOfData:
+                    break
     else:
         raise Exception("Motion capture data format not supported: " + file)
 
@@ -260,4 +480,6 @@ def loadFlySim(file):
         
         return fsTracking
     except pd.io.common.EmptyDataError as e:
+        return None
+    except:
         return None
