@@ -312,16 +312,35 @@ def countRecords(file):
     print("Determining number of records")
     totalNumRecords = 0
     
-    with open(file,'rb') as f:
-        for x in msgpack.Unpacker(f):
-            if not isinstance(x, int):
-                for b in x[2]:
-                    if 'Yframe' in b[0].decode():
-                        totalNumRecords += 1
-    print("Total number of records: "+str(totalNumRecords))
+    # Is an index available already?
+    fnameIdx = file.replace('.msgpack','.msgpack.index')
+    if os.path.exists(fnameIdx):
+        print("Using pre-computed index: "+fnameIdx)
+        conn = sqlite3.connect(fnameIdx)
+        c = conn.cursor()
+        s = [x for x in c.execute('select count(*) from idx')][0][0]
+        conn.close()
+        return s
+    else:
+        with open(file,'rb') as f:
+            for x in msgpack.Unpacker(f):
+                if not isinstance(x, int):
+                    for b in x[2]:
+                        if 'Yframe' in b[0].decode():
+                            totalNumRecords += 1
+        print("Total number of records: "+str(totalNumRecords))
     
-    return totalNumRecords
+        return totalNumRecords
 
+# This function returns a Queue that will be filled with the record number as soon as it is computed
+def countRecordsAsync(file):
+    q = multiprocessing.Queue()
+    def _countRecords(file):
+        q.put(countRecords(file))
+    t = threading.Thread(target=_countRecords, args = (file,))
+    t.start()
+    return q
+    
 # =======================================================================================
 # Convert a timestamp to formatted string
 # =======================================================================================
