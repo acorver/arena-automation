@@ -60,11 +60,27 @@ def askForExtractionSettings():
     root = tk.Tk()
     root.withdraw()
     numCameras = 0
-    filepaths = filedialog.askopenfilenames(title="Select the raw data files (.msgpack) to process.")
-    files += root.tk.splitlist(filepaths)    
-        
+    filepaths = filedialog.askdirectory(title="Select the directory to process.")
+    dirs = list(root.tk.splitlist(filepaths))
+    
+    # Get all the msgpack files in the directory (we don't choose .raw files, even where available.
+    # The assumption is the relevant script will switch to the .raw.msgpack file where necessary.)
+    files = []
+    for dir in dirs:
+        dataFiles = [x for x in os.listdir(dir) if x.endswith('.msgpack')]
+        if len(dataFiles) > 1:
+            dataFiles = [x for x in os.listdir(dir) if not x.endswith('.raw.msgpack')]
+            if len(dataFiles) != 1:
+                # There should only be one or two msgpack files in a directory, at most one 
+                # .msgpack file, and at most one .raw.msgpack. If these requirements are not 
+                # met, skip this directory
+                # TODO: Give a more helpful warning message instead...
+                continue
+        files += [os.path.join(dir, x) for x in dataFiles]
+
     # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime(x))
+    if len(files) > 0:
+        files.sort(key=lambda x: -os.path.getmtime(x))
     
     return ExtractionSettings(files, False)
 
@@ -104,6 +120,17 @@ def buildMocapIndex(file, verbose=False):
         c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
         conn.commit()
         conn.close()
+
+# =======================================================================================
+# Return all 3d markers in a MocapFrame, regardless of whether they're recognized or not
+# =======================================================================================
+
+def getAllMarkersInFrame(frame):
+    m = []
+    m += frame.unidentifiedVertices
+    for yf in frame.yframes:
+        m += yf.vertices
+    return m
 
 # =======================================================================================
 # Iterator for Yframes and return the parsed structure... 
@@ -157,9 +184,10 @@ class MocapFrameIterator:
     def __iter__(self):
         return self
 
-    def stopIteration(self):
+    def stopIteration(self, raiseStopIteration=True):
         self.f.close()
-        raise StopIteration
+        if raiseStopIteration:
+            raise StopIteration
     
     def __next__(self):
         try:
@@ -307,30 +335,40 @@ def updateYFrame(frame, trajectory=None):
 # Count number of records
 # =======================================================================================
 
-def countRecords(file):
+def countRecords(file, includeFrameRange=False, createIndexIfNotExists=True):
     # Determine total number of records
     print("Determining number of records")
     totalNumRecords = 0
+    minFrameIdx =  99999999
+    maxFrameIdx = -99999999
     
-    # Is an index available already?
     fnameIdx = file.replace('.msgpack','.msgpack.index')
+    
+    # Create an index if it doesn't exist
+    if createIndexIfNotExists and not os.path.exists(fnameIdx):
+        buildMocapIndex(file)
+        
+    # Is an index available already?
     if os.path.exists(fnameIdx):
         print("Using pre-computed index: "+fnameIdx)
         conn = sqlite3.connect(fnameIdx)
         c = conn.cursor()
-        s = [x for x in c.execute('select count(*) from idx')][0][0]
+        totalNumRecords = [x for x in c.execute('select count(*) from idx')][0][0]
+        minFrameIdx = [x for x in c.execute('select min(frameid) from idx')][0][0]
+        maxFrameIdx = [x for x in c.execute('select max(frameid) from idx')][0][0]
         conn.close()
-        return s
     else:
-        with open(file,'rb') as f:
-            for x in msgpack.Unpacker(f):
-                if not isinstance(x, int):
-                    for b in x[2]:
-                        if 'Yframe' in b[0].decode():
-                            totalNumRecords += 1
+        for frame in MocapFrameIterator(file):
+            totalNumRecords += 1
+            minFrameIdx = min(minFrameIdx, frame.frame)
+            maxFrameIdx = max(maxFrameIdx, frame.frame)
         print("Total number of records: "+str(totalNumRecords))
-    
-        return totalNumRecords
+        
+        if totalNumRecords == 0:
+            minFrameIdx = maxFrameIdx = None
+            
+    # Done!
+    return totalNumRecords if not includeFrameRange else (totalNumRecords, minFrameIdx, maxFrameIdx)
 
 # This function returns a Queue that will be filled with the record number as soon as it is computed
 def countRecordsAsync(file):

@@ -65,7 +65,7 @@ def processFile(folderPrefix, dayParts):
 # 
 # =======================================================================================
 
-def run(async=True):
+def run(settings, async=True):
     
     # Get a list of folders
     folders = [x for x in os.listdir('./') if os.path.isdir(x)]

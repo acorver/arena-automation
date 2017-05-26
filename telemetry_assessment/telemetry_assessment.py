@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     Tk().withdraw() # we don't want a full GUI, so keep the root window from appearing
     with filedialog.asksaveasfile(filetypes = (("Arduino Position Log", \
-        "*.arduino.position.log"), ("all files","*.*"))) as f:
+        "*.position.log"), ("all files","*.*"))) as f:
 
         print("Saving to file: "+str(f.name))
 
@@ -33,6 +33,8 @@ if __name__ == "__main__":
         # Send "space exploration" command
         ser.write('h\n'.encode('ascii'))
         ser.write('explore\n'.encode('ascii'))
+
+        print("Starting space exploration...")
 
         iline = 0
         while True:
