@@ -20,7 +20,12 @@
 // Quick-access settings
 // ================================================================
 
-const bool TRIALS_REQUIRE_PERCH = true;
+const bool TRIALS_REQUIRE_PERCH = false;
+
+#define USE_KANGAROO_FOR_Z false
+
+#define ENABLE_KANGAROO_Z1 true && USE_KANGAROO_FOR_Z
+#define ENABLE_KANGAROO_Z2 true && USE_KANGAROO_FOR_Z
 
 // ================================================================
 // Helper functions
@@ -73,11 +78,12 @@ unsigned long StartTime   = CurrentTime;  // mark the t0 point in microsecond
 // Kangaroo variables
 // ----------------------
 
-#define TUNE_MODE_NUMBER    3                   // MechStop is default for the FlySim X control
+#define TUNE_MODE_TEACH              1
+#define TUNE_MODE_MECHANICAL_STOP    3                   // MechStop is default for the FlySim X control
 
 Encoder Enc2(2, 3); // FlySim desktop model objects
 
-#define MAX_X_ERROR         32                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
+#define MAX_X_ERROR         100                 // Maximum error in Kangaroo positioning that still counts as "goal achieved"
 #define MAX_Z_ERROR         32                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
 
 long WHEEL_SIZE_X  =  40;
@@ -117,6 +123,12 @@ int g_AbortKangaroo = 0;
 
 // Is cortex recording?
 bool g_bCortexRecording = false;
+
+// ----------------------
+//  Variables for space exploration function
+// ----------------------
+
+long g_TimeUntilNextPosition = 0;
 
 // ----------------------
 // Variables indicating what function is running
@@ -293,7 +305,10 @@ bool kangarooAvailable(char a = ' ') {
     if (kangarooSerialZ == 0) {
       kz = false;
     } else {
-      if (kangarooZ1->getP().error() || kangarooZ2->getP().error()) {
+      if (kangarooZ2 && kangarooZ2->getP().error()) {
+        kz = false;
+      }
+      if (kangarooZ1 && kangarooZ1->getP().error()) {
         kz = false;
       }
     }
@@ -330,6 +345,13 @@ void cmdStatus(char** pArgs, uint8_t numArgs) {
   Serial.print("\"function\":\""+g_CurrentUpdateFunctionStr+"\",");
 
   Serial.print("\"status\":\""+String(g_Status)+"\",");
+
+  if (kangarooZ1) {
+    Serial.print("\"status_z1\":\""+String(kangarooZ1->getP().error())+"\",");
+  }
+  if (kangarooZ2) {
+    Serial.print("\"status_z2\":\""+String(kangarooZ2->getP().error())+"\",");
+  }
   
   Serial.print("\"PosX\":" +String(g_CurPosX )+",");
   Serial.print("\"PosZ1\":"+String(g_CurPosZ1)+",");
@@ -382,56 +404,90 @@ void cmdStartKangaroo(char** pArgs, uint8_t numArgs) {
   if (kangarooSerialX != 0 || kangarooSerialZ != 0) {
 
     kangarooX->powerDown();
-    kangarooZ1->powerDown();
-    kangarooZ2->powerDown();
+    
+    if (kangarooZ1 != NULL) {
+      kangarooZ1->powerDown();
+      delete kangarooZ1;
+      kangarooZ1 = 0;
+    }
+    if (kangarooZ2 != NULL) {
+      kangarooZ2->powerDown();
+      delete kangarooZ2;
+      kangarooZ2 = 0;
+    }
 
     delete kangarooSerialX;
     delete kangarooSerialZ;
     delete kangarooX;
-    delete kangarooZ1;
-    delete kangarooZ2;
   }
 
   // Configure serial ports
   Serial1.begin(115200); // This is the serial port to FlySim
-  Serial2.begin(115200); // This is the serial port for FlySim height controller
-
+  if (USE_KANGAROO_FOR_Z) {
+    Serial2.begin(9600); // This is the serial port for FlySim height controller
+    kangarooSerialZ = new KangarooSerial(Serial2);           // This is the Z-axis Kangaroo
+  } else {
+    Serial2.begin(115200);
+    while(!Serial2) { delay(1); }
+    Serial2.println("reset");
+  }
+  
   // Configure Kangaroo serial
   kangarooSerialX = new KangarooSerial(Serial1);           // This is the X-axis Kangaroo
-  kangarooSerialZ = new KangarooSerial(Serial2);           // This is the Z-axis Kangaroo
-
-  delay(1000);
+  
+  delay(500);
 
   // Configure controllers
   kangarooX  = new KangarooChannel(*kangarooSerialX, '1');   // This is the FlySim X
-  kangarooZ1 = new KangarooChannel(*kangarooSerialZ, '1');  // This is the FlySim pod 1
-  kangarooZ2 = new KangarooChannel(*kangarooSerialZ, '2');  // This is the FlySim pod 2
-
-  delay(1000);
+  if (ENABLE_KANGAROO_Z1 && USE_KANGAROO_FOR_Z) {
+    kangarooZ1 = new KangarooChannel(*kangarooSerialZ, '1');  // This is the FlySim pod 1
+  }
+  if (ENABLE_KANGAROO_Z2 && USE_KANGAROO_FOR_Z) {
+    kangarooZ2 = new KangarooChannel(*kangarooSerialZ, '2');  // This is the FlySim pod 2
+  }
+  
+  delay(500);
 
   // Configure timeouts
   kangarooX->commandTimeout(100);
-  kangarooZ1->commandTimeout(100);
-  kangarooZ2->commandTimeout(100);
-
+  if (kangarooZ1 && USE_KANGAROO_FOR_Z) {
+    kangarooZ1->commandTimeout(1000);
+  }
+  if (kangarooZ2 && USE_KANGAROO_FOR_Z) {
+    kangarooZ2->commandTimeout(1000);
+  }
+  
   // Initialize the X controller
   KangarooError e = KANGAROO_NO_ERROR;
 
   // Initialize the Z controllers
-  e = kangarooZ1->start();
-  e = kangarooZ2->start();
-
+  if (kangarooZ1 && USE_KANGAROO_FOR_Z) {
+    e = kangarooZ1->start();
+  }
+  if (kangarooZ2 && USE_KANGAROO_FOR_Z) {
+    e = kangarooZ2->start();
+  }
+  
   delay(2000);
 
-  e = kangarooZ1->home().wait(KANGAROO_COMMAND_TIMEOUT_MS).status().error();
-  if (e != KANGAROO_NO_ERROR) {
-    sendError("Kangaroo Z1 failed: ");
-    Serial.println(e);
+  if (kangarooZ1 && USE_KANGAROO_FOR_Z) {
+    e = kangarooZ1->home().wait(KANGAROO_COMMAND_TIMEOUT_MS).status().error();
+    if (e != KANGAROO_NO_ERROR) {
+      sendError("Kangaroo Z1 failed: ");
+      Serial.println(e);
+    } else {
+      Serial.println("Kangaroo Z1 started successfully.");
+    }
   }
-  e = kangarooZ2->home().wait(KANGAROO_COMMAND_TIMEOUT_MS).status().error();
-  if (e != KANGAROO_NO_ERROR) {
-    sendError("Kangaroo Z2 failed: ");
-    Serial.println(e);
+  
+  if (kangarooZ2 && USE_KANGAROO_FOR_Z) {
+    e = kangarooZ2->home().wait(KANGAROO_COMMAND_TIMEOUT_MS).status().error();
+    if (e != KANGAROO_NO_ERROR) {
+      sendError("Kangaroo Z2 failed: ");
+      Serial.println(e);
+    } else {
+      Serial.println("Kangaroo Z2 started successfully.");
+    }
   }
 
   e = kangarooX->start();
@@ -463,7 +519,7 @@ void cmdTune(char** pArgs, uint8_t numArgs) {
   KangarooError e = KANGAROO_NO_ERROR;
 
   // Enter the desired tune mode.
-  long enterModeParams[1] = { TUNE_MODE_NUMBER };
+  long enterModeParams[1] = { TUNE_MODE_MECHANICAL_STOP };
   e = kangarooX->systemCommand(KANGAROO_SYS_TUNE_ENTER_MODE, false, enterModeParams, 1);
 
   if (e != KANGAROO_NO_ERROR) {
@@ -472,7 +528,7 @@ void cmdTune(char** pArgs, uint8_t numArgs) {
     return;
   }
 
-  // Set the disabled channel bitmask to 0 (tune all channels).
+  // Set the disabled channel bitmask (only use channel 1, not channel 2)
   long disableChannelsParams[1] = { 2 };
   e = kangarooX->systemCommand(KANGAROO_SYS_TUNE_SET_DISABLED_CHANNELS, false, disableChannelsParams, 1);
 
@@ -502,6 +558,87 @@ void updateTune(long elapsedTime) {
   if ( CurrentTime - g_CurrentCommandStartTime > 30 * 1000000 ) {
 
     Serial.println("Tuning finished");
+    g_CurrentUpdateFunctionStr = "";
+    g_CurrentUpdateFunction = NULL;
+  }
+}
+
+
+// ================================================================
+// ====== COMMAND: TUNE
+// ================================================================
+
+void cmdTuneZ(char** pArgs, uint8_t numArgs) {
+
+  Serial.println("Starting auto-tuning");
+
+  /*
+  if (!kangarooAvailable('z')) {
+    sendError("Error: Can't tune, Z Kangaroo's not initialized.");
+    return;
+  }
+  */
+
+  KangarooError e1 = KANGAROO_NO_ERROR, e2 = KANGAROO_NO_ERROR;
+
+  // Enter the desired tune mode.
+  long enterModeParams[1] = { TUNE_MODE_MECHANICAL_STOP };
+  e1 = kangarooZ1->systemCommand(KANGAROO_SYS_TUNE_ENTER_MODE, false, enterModeParams, 1);
+  //e2 = kangarooZ2->systemCommand(KANGAROO_SYS_TUNE_ENTER_MODE, false, enterModeParams, 1);
+  if (e1 != KANGAROO_NO_ERROR || e2 != KANGAROO_NO_ERROR) {
+    sendError("KANGAROO_SYS_TUNE_ENTER_MODE failed: ");
+    Serial.println(e1);
+    Serial.println(e2);
+    return;
+  }
+  
+  // Set the disabled channel bitmask to 0 (tune all channels).
+  long disableChannelsParams[1] = { 2 };
+  e1 = kangarooZ1->systemCommand(KANGAROO_SYS_TUNE_SET_DISABLED_CHANNELS, false, disableChannelsParams, 1);
+  //e2 = kangarooZ2->systemCommand(KANGAROO_SYS_TUNE_SET_DISABLED_CHANNELS, false, disableChannelsParams, 1);
+  if (e1 != KANGAROO_NO_ERROR || e2 != KANGAROO_NO_ERROR) {
+    sendError("KANGAROO_SYS_TUNE_SET_DISABLED_CHANNELS failed: ");
+    Serial.println(e1);
+    Serial.println(e2);
+    return;
+  }
+ 
+  delay(500);
+
+  // set power (go up)
+  /*
+  long powerCommands[1] = { 2^28 - 1 };
+  e1 = kangarooZ1->systemCommand(KANGAROO_SYS_TUNE_CONTROL_OPEN_LOOP, false, powerCommands, 1);
+  if (e1 != KANGAROO_NO_ERROR || e2 != KANGAROO_NO_ERROR) {
+    sendError("KANGAROO_SYS_TUNE_CONTROL_OPEN_LOOP failed: ");
+    Serial.println(e1);
+    Serial.println(e2);
+    return;
+  }
+  */
+  
+  // Begin the tune.
+  long goParams[0];
+  e1 = kangarooZ1->systemCommand(KANGAROO_SYS_TUNE_GO, false, goParams, 0);
+  //e2 = kangarooZ2->systemCommand(KANGAROO_SYS_TUNE_GO, false, goParams, 0);
+  
+  if (e1 != KANGAROO_NO_ERROR || e2 != KANGAROO_NO_ERROR) {
+    sendError("KANGAROO_SYS_TUNE_GO failed: ");
+    Serial.println(e1);
+    Serial.println(e2);
+    return;
+  }
+  
+  // Save the function we're using
+  g_CurrentUpdateFunctionStr = "cmdTuneZ";
+  g_CurrentUpdateFunction = &updateTuneZ;
+}
+
+void updateTuneZ(long elapsedTime) {
+
+  if ( CurrentTime - g_CurrentCommandStartTime > 60 * 1000000 ) {
+
+    Serial.println("Tuning Z finished");
     g_CurrentUpdateFunctionStr = "";
     g_CurrentUpdateFunction = NULL;
   }
@@ -623,7 +760,7 @@ void cmdZ(char** pArgs, uint8_t numArgs) {
   targetVelocityZ = speed;
 }
 
-void cmdX(char** pArgs, uint8_t numArgs) {
+void _cmdX(char** pArgs, uint8_t numArgs, bool relativeToCenter) {
 
   long speed = 100;
   long x     = 0;
@@ -635,15 +772,17 @@ void cmdX(char** pArgs, uint8_t numArgs) {
     return;
   }
 
+  int inputX = String(pArgs[0]).toInt();
   if (numArgs >= 1) {
-    x     = String(pArgs[0]).toInt();
+    x     = (relativeToCenter?(g_MinPosX+g_MaxPosX)/2:0) + inputX;
   }
   if (numArgs == 2) {
     speed = String(pArgs[1]).toInt();
   }
 
   Serial.print("Moving to X=");
-  Serial.print(x);
+  Serial.print(inputX);
+  Serial.print(relativeToCenter?" (relative to center)":"");
   Serial.print(" at speed ");
   Serial.println(speed);
 
@@ -652,6 +791,16 @@ void cmdX(char** pArgs, uint8_t numArgs) {
 
   g_CurrentUpdateFunction = &updateX;
   g_CurrentUpdateFunctionStr = "cmdX";
+}
+
+void cmdX(char** pArgs, uint8_t numArgs) {
+
+  _cmdX(pArgs, numArgs, false);
+}
+
+void cmdXRelToCenter(char** pArgs, uint8_t numArgs) {
+
+  _cmdX(pArgs, numArgs, true);
 }
 
 void updateX(long elapsedTime) {
@@ -699,14 +848,25 @@ void cmdDfOnPerch(char** pArgs, uint8_t numArgs) {
 // =====           and heights in the range [E,F]
 // ================================================================
 
+String g_TrialsMode = "";
+
 void cmdTrials(char** pArgs, uint8_t numArgs) {
-  if (kangarooAvailable()) {
+  if (true || kangarooAvailable()) {
+
+    if (numArgs >= 1) {
+      g_TrialsMode = String(pArgs[0]);
+    } else {
+      g_TrialsMode = String("");
+    }
+    
     g_CurrentUpdateFunction = updateTrials;
     g_CurrentUpdateFunctionStr = "cmdTrials";
   } else {
     sendError("Error: Can't start trials, Kangaroo not initialized.");
   }
 }
+
+long g_TimeLastTrial = 0;
 
 void updateTrials(long elapsedTime) {
 
@@ -718,6 +878,11 @@ void updateTrials(long elapsedTime) {
   //    o The trial would not fire regardless (i.e. previous trial happened too shortly before)
   //    o The final seconds of countdown to trial have already commenced, and Cortex has potentially already been notified.
   //      The dF might have flown away just prior to trial, but go through with the trial anyway.
+
+  // If no trials for a while, and dF just became ready on perch, immediately start trial
+  if ( (micros()-g_TimeLastTrial) > 25e6) {
+    g_TimeUntilTrial = min( PRE_TRIAL_PERIOD, g_TimeUntilTrial);
+  }
   
   if (!TRIALS_REQUIRE_PERCH || g_DfReadyOnPerch || 
     g_TimeUntilTrial - elapsedTime >= PRE_TRIAL_PERIOD || g_TimeUntilTrial < PRE_TRIAL_PERIOD) { 
@@ -734,17 +899,19 @@ void updateTrials(long elapsedTime) {
   // Wait to start trial (so as not to habituate the dF)
   if (g_TimeUntilTrial < 0) {
 
-    // Did we reach our goal for the current segment? (Build in fail-safe, in case tuning is off)
-    if ( abs(g_CurPosX - targetPositionX) > MAX_X_ERROR && g_TimeUntilTrial > -8 * 1000000 ) {
-
-     for (int i = 0; i < NUM_VELOCITY_SEGMENTS; i++) {
-        if (g_CurPosX > (i == 0 ? -1000000 : g_VelocitySegmentBounds[i - 1]) && g_CurPosX < (i == NUM_VELOCITY_SEGMENTS - 1 ? 1000000 : g_VelocitySegmentBounds[i])) {
-          // update target velocity
-          targetVelocityX = g_VelocitySegments[i];
-          // Done with loop, found speed
-          break;
-        }
+    for (int i = 0; i < NUM_VELOCITY_SEGMENTS; i++) {
+      if (g_CurPosX > (i == 0 ? -1000000 : g_VelocitySegmentBounds[i - 1]) && g_CurPosX < (i == NUM_VELOCITY_SEGMENTS - 1 ? 1000000 : g_VelocitySegmentBounds[i])) {
+        // update target velocity
+        targetVelocityX = g_VelocitySegments[i];
+        // Done with loop, found speed
+        break;
       }
+    }
+    
+    // Did we reach our goal for the current segment?
+    if ( abs(g_CurPosX - targetPositionX) > MAX_X_ERROR && g_TimeUntilTrial > -5e6 && 
+      (abs(g_CurPosX-g_MinPosX) > 20 || targetVelocityX > 0) && 
+      (abs(g_CurPosX-g_MaxPosX) > 20 || targetVelocityX < 0) ) {
       
       // Determine target velocity (will vary based on current speedups, noise, etc.)
       // Note: This if statement assumes maximum velocity boost duration is shorter than minimum time to traverse segment
@@ -787,12 +954,19 @@ void updateTrials(long elapsedTime) {
 
       // Enforce maximum velocity to prevent Kangaroo malfunction
       targetVelocityX = max(min(targetVelocityX, 2000), -2000);
-
+    
       // If not, let Kangaroo controllers update system state
       kangarooX->s( (int) (targetVelocityX + currentVelocityNoiseX) / CONVERSION_X ).wait();
 
     } else {
 
+      // We reached the end of the trial...
+      targetVelocityX = 0;
+      // let Kangaroo controllers update system state
+      kangarooX->s( 0 ).wait();
+      // Save time
+      g_TimeLastTrial = micros();
+        
       // Wait a little bit longer, then trigger Cortex to stop saving
       Serial.println("Starting new trial in 2 seconds.");
       delay(2000);
@@ -802,23 +976,47 @@ void updateTrials(long elapsedTime) {
       long xCnt = (g_MinPosX + g_MaxPosX) / 2;
 
       // Go to the opposite end
-      long dst = g_MinPosX;
+      long dst = g_MinPosX + (g_MinPosX<g_MaxPosX?1:-1) * 120;
       if (abs(g_MaxPosX - g_CurPosX) > abs(g_MinPosX - g_CurPosX)) {
-        dst = g_MaxPosX;
+        dst = g_MaxPosX - (g_MinPosX<g_MaxPosX?1:-1) * 120;
       }
 
       long height = random(12, 18) * 25;
       long dir   = (dst - g_CurPosX) / abs(dst - g_CurPosX);
-      long speed1base = (targetPositionZ * 3) + (random(0, 400)-200);
-      long speedup = random(0,100)<=20?0:((random(0,100)<=50?1:-1)*random(200,400));
+      long speed1base = (targetPositionZ * 3.3) + (random(0, 400)-200);
+      long speedup = random(0,100)<=20?0:((random(0,100)<=50?1:-1)*random(300,500));
+
+      // Use pre-programmed set of speedup/slowdown trials?
+      if (g_TrialsMode.indexOf("fixed_speedup_set")!=-1) {
+        int choice = random(0,2 + 0);
+        if (choice == 0) {
+          height = 400;
+          speed1base = 1000;
+          speedup = 400;
+        } else if (choice == 1) {
+          height = 400;
+          speed1base = 1000;
+          speedup = -400;
+        } else {
+          // Do nothing... hence the range of random(...) determine the percentage of times we use this fixed set
+        }
+        Serial.println("Using fixed set of speedups");
+      }
+      
       long speed1 = dir >  0 ? speed1base : speed1base+speedup;
       long speed2 = dir <= 0 ? speed1base : speed1base+speedup;
       
       long tWait;
       if (g_TrialIdx < 5) {
-        tWait = random(9, 12) * 1000000;
+        tWait = random(15, 30) * 1000000;
       } else {
         tWait = random(50, 80) * 1000000;
+      }
+
+      // Debug mode? If so, present trials quickly for easier debugging...
+      if (g_TrialsMode.indexOf("debug")!=-1) {
+        tWait = 5000000;
+        Serial.println("Debug mode, skipping");
       }
       
       g_TrialIdx++;
@@ -833,7 +1031,7 @@ void updateTrials(long elapsedTime) {
       // Set appropriate X speed
       g_VelocitySegments[0] = dir * speed1;
       g_VelocitySegments[1] = dir * (random(0, 100) > 0 ? speed2 : speed1);
-      g_VelocitySegmentBounds[0] = 950; // - dir * 70; //(g_MinPosX + g_MaxPosX) * 0.5 + 200;
+      g_VelocitySegmentBounds[0] = - dir * 150 + (g_MinPosX + g_MaxPosX) / 2;
       targetPositionX = dst;
       
       // Set appropriate Z position
@@ -859,6 +1057,177 @@ void updateTrials(long elapsedTime) {
       //
       Serial.println("Started new trial: ");
       cmdStatus(NULL, NULL);
+    }
+  }
+}
+
+// ================================================================
+// ====== COMMAND: Present a single trial
+// ================================================================
+
+void cmdTrial(char** pArgs, uint8_t numArgs) {
+
+  if (numArgs != 2) {
+    Serial.println("Invalid arguments. trial <height> <speed>");
+    return;
+  }
+
+  startTrial(String(pArgs[0]).toInt(),200,String(pArgs[1]).toInt());
+  
+  g_CurrentUpdateFunction = updateTrial;
+  g_CurrentUpdateFunctionStr = "cmdTrial";
+}
+
+void startTrial(int targetPosZ, int targetVelZ, int targetVelX) {
+  
+  targetPositionZ = targetPosZ;
+  targetVelocityZ = targetVelZ;
+  
+  // What direction to move in?
+  long xCnt = (g_MinPosX + g_MaxPosX) / 2;
+
+  // Go to the opposite end
+  targetPositionX = g_MinPosX - 580;
+  if (abs(g_MaxPosX - g_CurPosX) > abs(g_MinPosX - g_CurPosX)) {
+    targetPositionX = g_MaxPosX + 580;
+  }
+  long dir  = (targetPositionX - g_CurPosX) / abs(targetPositionX - g_CurPosX);
+
+  g_VelocitySegments[0]  = targetVelX * dir;
+}
+
+void updateTrial(long elapsedTime) {
+
+  // Wait until we reach the right Z height
+  if ( abs(g_CurPosZ1 - targetPositionZ) < MAX_Z_ERROR ) {
+    // Did we reach our goal for the current segment? /*(Build in fail-safe, in case tuning is off)*/
+    if ( abs(g_CurPosX - targetPositionX) > MAX_X_ERROR /* && g_TimeUntilTrial > -8 * 1000000 */ ) {
+      targetVelocityX = g_VelocitySegments[0];
+    } else {
+      targetVelocityX = 0;
+      g_CurrentUpdateFunction = NULL;
+      g_CurrentUpdateFunctionStr = "";
+    }
+    kangarooX->s( (int) targetVelocityX / CONVERSION_X ).wait();
+  }
+}
+
+// ================================================================
+// ====== COMMAND: Present trials of increasing speed at a given height
+// ================================================================
+
+void cmdTrialsIncreasingSpeed(char** pArgs, uint8_t numArgs) {
+  
+}
+
+// ================================================================
+// ====== COMMAND: Explore space fast
+// ================================================================
+
+void cmdExploreSpaceFast(char** pArgs, uint8_t numArgs) {
+
+  g_TimeUntilTrial = -1;
+
+  targetPositionZ = -100;
+    
+  g_CurrentUpdateFunction = updateExploreSpaceFast;
+  g_CurrentUpdateFunctionStr = "cmdExploreSpaceFast";
+}
+
+void updateExploreSpaceFast(long elapsedTime) {
+
+  g_TimeUntilTrial -= elapsedTime;
+
+  if (g_TimeUntilTrial < 0) {
+
+    g_TimeUntilTrial = 2000000;
+
+    int newTargetPosZ = targetPositionZ + 100;
+
+    //Serial.print("TargetPos=");
+    //Serial.println(newTargetPosZ);
+      
+    if (newTargetPosZ <= 1000) {
+      Serial.print("Starting new trial: z=");
+      Serial.println(newTargetPosZ);
+      startTrial(newTargetPosZ, 300, 1000);
+    }
+  } else {
+    updateTrial(elapsedTime);
+    if (g_CurrentUpdateFunction == NULL) {
+      g_TimeUntilTrial = -1;
+      g_CurrentUpdateFunction = updateExploreSpaceFast;
+      g_CurrentUpdateFunctionStr = "cmdExploreSpaceFast";
+    }
+  }
+}
+
+// ================================================================
+// ====== COMMAND: Explore a grid
+// ================================================================
+
+void cmdExploreSpace(char** pArgs, uint8_t numArgs) {
+
+  targetPositionX = (g_MinPosX+g_MaxPosX)/2 -550;
+  targetPositionZ = 0;
+
+  targetVelocityX = 200;
+  targetVelocityZ = 100;
+
+  g_TimeUntilNextPosition = 8000000;
+  
+  g_CurrentUpdateFunction = updateExploreSpace;
+  g_CurrentUpdateFunctionStr = "cmdExploreSpace";
+}
+
+void updateExploreSpace(long elapsedTime) {
+
+  long g_CurPosZ = (g_CurPosZ1+g_CurPosZ2)/2;
+
+  const int Z_INCREMENT = 50;
+  const int X_INCREMENT = 50;
+  
+  /* If one of Z motors failed, restart motors */
+  /*
+  if ( abs(g_CurPosZ1-g_CurPosZ2) > 50 ) {
+    cmdStatus(NULL, NULL);
+    cmdStartKangaroo(NULL, NULL);
+  }
+  */
+  
+  /* Update until we arrive at position */
+  if (abs(g_CurPosX - targetPositionX) > MAX_X_ERROR || 
+      abs(g_CurPosZ - targetPositionZ) > 5) {
+    
+    kangarooX->p(targetPositionX / CONVERSION_X, targetVelocityX / CONVERSION_X);
+
+  } else {
+    /* Print position */
+    Serial.println("pos,"+String(g_CurPosX-(g_MinPosX+g_MaxPosX)/2)+","+String(g_CurPosZ1)+","+String(g_CurPosZ2));
+  
+    /* Switch to next position if time has elapsed */
+    g_TimeUntilNextPosition -= elapsedTime;
+    if (g_TimeUntilNextPosition < 0) {
+
+      g_TimeUntilNextPosition = 6000000;
+      
+      targetPositionX += X_INCREMENT;
+      
+      /* Reached the end of the line? */
+      if (targetPositionX > (g_MinPosX+g_MaxPosX)/2 + 650) {
+        targetPositionX = (g_MinPosX+g_MaxPosX)/2 - 650;
+        targetPositionZ += Z_INCREMENT;
+      }
+      /* Reached the end of the whole plane? */
+      if (targetPositionZ > 600) {
+        targetPositionZ = 0;
+        targetPositionX = 0;
+      
+        g_CurrentUpdateFunction = NULL;
+        g_CurrentUpdateFunctionStr = "";
+  
+        Serial.println("finished exploring space");
+      }
     }
   }
 }
@@ -896,8 +1265,13 @@ void updatePowerdown(long elapsedTime) {
   if (g_CurPosZ1 < 50 && g_CurPosZ2 < 50) {
 
     kangarooX->powerDown();
-    kangarooZ1->powerDown();
-    kangarooZ2->powerDown();
+    
+    if (kangarooZ1) {
+      kangarooZ1->powerDown();
+    }
+    if (kangarooZ2) {
+      kangarooZ2->powerDown();
+    }
   }
 }
 
@@ -917,32 +1291,24 @@ void processSerialCommand(char** pArgs, uint8_t numArgs) {
 
   // Determine function to execute
   Serial.println(cmd);
-  if (cmd == "status"     ) {
-    fun = &cmdStatus;
-  } else if (cmd == "h"          ) {
-    fun = &cmdIdentify;
-  } else if (cmd == "tune"       ) {
-    fun = &cmdTune;
-  } else if (cmd == "z"          ) {
-    fun = &cmdZ;
-  } else if (cmd == "x"          ) {
-    fun = &cmdX;
-  } else if (cmd == "trials"     ) {
-    fun = &cmdTrials;
-  } else if (cmd == "kangaroo"   ) {
-    fun = &cmdStartKangaroo;
-  } else if (cmd == "abort"      ) {
-    fun = &cmdAbort;
-  } else if (cmd == "powerdown"  ) {
-    fun = &cmdPowerdown;
-  } else if (cmd == "neutral"    ) {
-    fun = &cmdNeutral;
-  } else if (cmd == "speedx"     ) {
-    fun = &cmdSpeedX;
-  } else if (cmd == "trajectory" ) {
-    fun = &cmdTrajectory;
-  } else if (cmd == "df_ready_on_perch" ) {
-    fun = &cmdDfOnPerch;
+  if (cmd == "status"            ) { fun = &cmdStatus;
+  } else if (cmd == "h"          ) { fun = &cmdIdentify;
+  } else if (cmd == "tune"       ) { fun = &cmdTune;
+  } else if (cmd == "tunez"      ) { fun = &cmdTuneZ;
+  } else if (cmd == "z"          ) { fun = &cmdZ;
+  } else if (cmd == "x"          ) { fun = &cmdX;
+  } else if (cmd == "xcent"      ) { fun = &cmdXRelToCenter;
+  } else if (cmd == "trial"      ) { fun = &cmdTrial;
+  } else if (cmd == "trials"     ) { fun = &cmdTrials;
+  } else if (cmd == "explore"    ) { fun = &cmdExploreSpace;
+  } else if (cmd == "explorefast") { fun = &cmdExploreSpaceFast;
+  } else if (cmd == "kangaroo"   ) { fun = &cmdStartKangaroo;
+  } else if (cmd == "abort"      ) { fun = &cmdAbort;
+  } else if (cmd == "powerdown"  ) { fun = &cmdPowerdown;
+  } else if (cmd == "neutral"    ) { fun = &cmdNeutral;
+  } else if (cmd == "speedx"     ) { fun = &cmdSpeedX;
+  } else if (cmd == "trajectory" ) { fun = &cmdTrajectory;
+  } else if (cmd == "df_ready_on_perch" ) { fun = &cmdDfOnPerch;
   } else {
 
     // Command not recognized....
@@ -967,6 +1333,8 @@ void processSerialCommand(char** pArgs, uint8_t numArgs) {
 // ================================================================
 // Loop
 // ================================================================
+
+int lastTargetPositionZ = 0;
 
 void loop() {
 
@@ -1003,24 +1371,43 @@ void loop() {
     g_CurVelX  = kangarooX->getS().value()  * CONVERSION_X;
 
     // Get information on bounds
-    g_MinPosX = kangarooX->getMax().value() / 2;
-    g_MaxPosX = kangarooX->getMin().value() / 2;
+    g_MinPosX = kangarooX->getMin().value() / 2;
+    g_MaxPosX = kangarooX->getMax().value() / 2;
   }
-
-  if (kz) {
-    g_CurPosZ1 = kangarooZ1->getP().value() * CONVERSION_Z;
-    g_CurPosZ2 = kangarooZ2->getP().value() * CONVERSION_Z;
-    g_CurVelZ1 = kangarooZ1->getS().value() * CONVERSION_Z;
-    g_CurVelZ2 = kangarooZ2->getS().value() * CONVERSION_Z;
+  
+  if (USE_KANGAROO_FOR_Z) {
+    if (kz) {
+      if (kangarooZ1) {
+        g_CurPosZ1 = kangarooZ1->getP().value() * CONVERSION_Z;
+        g_CurVelZ1 = kangarooZ1->getS().value() * CONVERSION_Z;
+      }
+      if (kangarooZ2) {
+        g_CurVelZ2 = kangarooZ2->getS().value() * CONVERSION_Z;
+        kangarooZ2->getS().value() * CONVERSION_Z;
+        g_CurPosZ2 = kangarooZ2->getP().value() * CONVERSION_Z;
+      }
+    }
   }
 
   // -----------------------------------
   // Maintain Z
   // -----------------------------------
 
-  if (kz) {
-    kangarooZ1->p(targetPositionZ / CONVERSION_Z, targetVelocityZ / CONVERSION_Z);
-    kangarooZ2->p(targetPositionZ / CONVERSION_Z, targetVelocityZ / CONVERSION_Z);
+  if (USE_KANGAROO_FOR_Z) {
+    if (kz) {
+      if (kangarooZ1) {
+        kangarooZ1->p(targetPositionZ / CONVERSION_Z, targetVelocityZ / CONVERSION_Z);
+      }
+      if (kangarooZ2) {
+        kangarooZ2->p(targetPositionZ / CONVERSION_Z, targetVelocityZ / CONVERSION_Z);
+      }
+    }
+  } else {
+    if (targetPositionZ != lastTargetPositionZ) {
+      lastTargetPositionZ = targetPositionZ;
+      Serial2.print("position ");
+      Serial2.println( int( max(0, targetPositionZ-50) * 1.2 ) );
+    }
   }
 
   // -----------------------------------
@@ -1040,7 +1427,9 @@ void loop() {
   if ( STOP == 1 ) {
 
     kangarooZ1->powerDown();
-    kangarooZ2->powerDown();
+    if (kangarooZ2 != NULL) {
+      kangarooZ2->powerDown();
+    }
   }
 
   // -----------------------------------
