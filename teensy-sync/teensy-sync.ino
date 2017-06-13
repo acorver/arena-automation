@@ -37,23 +37,19 @@ void setup() {
 void loop() {
 
   // Turn on LED's for just 5 frames
-  if (digitalRead(PIN_TRIGGER_IN) == HIGH) {
-    if (g_nNumFramesOn < BLINK_NUM_FRAMES) {
-      // Turn all LED's on
-      for (int i = 0; i < NUM_LEDS; i++) {
-        digitalWrite(PIN_LEDS[i], HIGH );
-      }
-      delayMicroseconds(BLINK_MICROSECONDS); 
-      g_nNumFramesOn ++;
-      
-    } else if (g_nNumFramesOn == BLINK_NUM_FRAMES) {
-      
-      // Turn LED's off (== comparison ensures this happens only once... not crucial, but might save some clock cycles??)
-      for (int i = 0; i < NUM_LEDS; i++) {
-        digitalWrite(PIN_LEDS[i], LOW );
-      }
+  if (digitalRead(PIN_TRIGGER_IN) == HIGH && g_nNumFramesOn == 0) {
+    // Turn all LED's on
+    for (int i = 0; i < NUM_LEDS; i++) {
+      digitalWrite(PIN_LEDS[i], HIGH );
     }
-  } else {
+    delayMicroseconds(BLINK_MICROSECONDS * BLINK_NUM_FRAMES); 
+    for (int i = 0; i < NUM_LEDS; i++) {
+      digitalWrite(PIN_LEDS[i], LOW );
+    }
+    g_nNumFramesOn ++;
+  }
+
+  if (digitalRead(PIN_TRIGGER_IN) == LOW) {
     g_nNumFramesOn = 0;
   }
 } 
