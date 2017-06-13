@@ -9,12 +9,14 @@ namespace rotatingperch {
 	typedef struct Perch {
 		int   mMotorIdx;
 		float mTargetAngle;
+		float mTargetAngleWithoutDf;
 		int   mRotateDir;
 
-		Perch() { Perch(0, 0, 1); }
-		Perch(int m, float a, int d) {
+		Perch() { Perch(0, 0, 0, 1); }
+		Perch(int m, float a, float a2, int d) {
 			mMotorIdx = m;
 			mTargetAngle = a;
+			mTargetAngleWithoutDf = a2;
 			mRotateDir = d;
 		}
 	} Perch;
@@ -36,17 +38,21 @@ namespace rotatingperch {
 
 			float targetAngle = float(_ss<double>((std::string("rotatingperch.perch_") +
 				std::to_string(i) + std::string("_target_angle")).c_str())) * PI / 180;
+			float targetAngleWithoutDf = float(_ss<double>((std::string("rotatingperch.perch_") +
+				std::to_string(i) + std::string("_target_angle_without_df")).c_str())) * PI / 180;
 
 			// Convert target angle to [-PI,PI] range
 			while (targetAngle >  PI) { targetAngle -= 2 * PI; }
 			while (targetAngle < -PI) { targetAngle += 2 * PI; }
+			while (targetAngleWithoutDf >  PI) { targetAngleWithoutDf -= 2 * PI; }
+			while (targetAngleWithoutDf < -PI) { targetAngleWithoutDf += 2 * PI; }
 
 			int rotateDir = _ss<int>((std::string("rotatingperch.perch_") +
 				std::to_string(i) + std::string("_rotate_dir")).c_str());
 
 			if ( bodyName != "") {
 				g_PerchLocations[bodyName] = Perch(motorIdx, 
-					targetAngle, rotateDir);
+					targetAngle, targetAngleWithoutDf, rotateDir);
 			} else {
 				break;
 			}
@@ -75,8 +81,8 @@ namespace rotatingperch {
 		// Get dF positions
 		std::vector<std::vector<float3>> dfs;
 		for (int j = 0; j < frameOfData->nBodies; j++) {
-			if (std::string(frameOfData->BodyData[j].szName).find(
-				_s<std::string>("tracking.body_name")) != std::string::npos) {
+			if (!boost::algorithm::ifind_first(std::string(frameOfData->BodyData[j].szName), 
+				_s<std::string>("tracking.body_name")).empty()) {
 
 				// IMPORTANT NOTE: The 1,2,0 order is dependent on the particular Yframe
 				// markerset, and the indices of the markers... The current Yframe 
@@ -87,7 +93,7 @@ namespace rotatingperch {
 
 				if (dr[0] == CORTEX_INVALID_MARKER) { dr = dl; }
 				if (dl[0] == CORTEX_INVALID_MARKER) { dl = dr; }
-				if (df[0] == CORTEX_INVALID_MARKER) { df = 0.5f * (dl + dr) + cross(dr - dl, float3(0, 0, 1)); }
+				if (df[0] == CORTEX_INVALID_MARKER) { df = 0.5f * (dl + dr) - cross(dr - dl, float3(0, 0, 1)); }
 
 				float3 dc = 0.5f * (df + 0.5f * (dl + dr));
 				dfs.push_back({ dc, df, dl, dr });
@@ -128,13 +134,14 @@ namespace rotatingperch {
 					float3 d = tf - 0.5f * (tl + tr); d[2] = 0;
 					d = normalize(d);
 					float a = std::atan2(d[1], d[0]);
-					float diff = a - perch.second.mTargetAngle;
+					float aTarget = (isDfOnPerch ? perch.second.mTargetAngle : perch.second.mTargetAngleWithoutDf);
+					float diff = a - aTarget;
 
 					// Optional debug output
 					if (_s<bool>("rotatingperch.debug")) {
 						std::cout << "Perch " << perch.first <<
 							"'s orientation is " << a * 180 / PI <<
-							(isDfOnPerch ? " (dF on perch)" : "") << "\n";
+							(isDfOnPerch ? " (dF on perch)" : "") << " (Target is " << (aTarget * 180 / PI) << ")\n";
 					}
 
 					if (abs(diff) < _s<double>("rotatingperch.max_orientation_error") * PI / 180) {

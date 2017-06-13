@@ -225,7 +225,7 @@ void motion::SaveFrames(int finalFrameIndex) {
 // Desc:  This function is called by Cortex when a new frame 
 //        has arrived. In order not to block Cortex's smooth 
 //        operations, analysis of the incoming motion data
-//        is performed on a separate thread. See ProcessFrameBuffer().
+//        is performed on a separate thread. See WatchFrameBuffer().
 // ----------------------------------------------
 
 void motion::BufferFrame(sFrameOfData* frameOfData) {
@@ -236,10 +236,10 @@ void motion::BufferFrame(sFrameOfData* frameOfData) {
     // Save copy of frame data
 	CortexFrame* pCortexFrame = new CortexFrame();
 	if (pCortexFrame) {
-		pCortexFrame->nTimestampReceived = common::GetTimestamp(); // still error.... is this a timestamp issue?
 		pCortexFrame->pFrame = new sFrameOfData();
 		memset(pCortexFrame->pFrame, 0, sizeof(sFrameOfData));
 		Cortex_CopyFrame(frameOfData, pCortexFrame->pFrame);
+		pCortexFrame->nTimestampReceived = common::GetTimestamp(); // still error.... is this a timestamp issue?
 		g_FrameBuffer.push(pCortexFrame);
 		g_FrameBufferSize++;
 	}
@@ -247,10 +247,10 @@ void motion::BufferFrame(sFrameOfData* frameOfData) {
 	// Save copy for the saving thread (TODO: Perhaps don't copy the frame twice?)
 	CortexFrame* pCortexFrame2 = new CortexFrame();
 	if (pCortexFrame2) {
-		pCortexFrame2->nTimestampReceived = pCortexFrame->nTimestampReceived;
 		pCortexFrame2->pFrame = new sFrameOfData();
 		memset(pCortexFrame2->pFrame, 0, sizeof(sFrameOfData));
 		Cortex_CopyFrame(frameOfData, pCortexFrame2->pFrame);
+		pCortexFrame2->nTimestampReceived = pCortexFrame->nTimestampReceived;
 		g_FrameBufferSave.push(pCortexFrame2);
 		g_FrameBufferSaveSize++;
 	}
@@ -258,10 +258,10 @@ void motion::BufferFrame(sFrameOfData* frameOfData) {
 	// Save copy for the saving thread (TODO: Perhaps don't copy the frame thrice?)
 	CortexFrame* pCortexFrame3 = new CortexFrame();
 	if (pCortexFrame3) {
-		pCortexFrame3->nTimestampReceived = pCortexFrame->nTimestampReceived;
 		pCortexFrame3->pFrame = new sFrameOfData();
 		memset(pCortexFrame3->pFrame, 0, sizeof(sFrameOfData));
 		Cortex_CopyFrame(frameOfData, pCortexFrame3->pFrame);
+		pCortexFrame3->nTimestampReceived = pCortexFrame->nTimestampReceived;
 		g_FrameBufferMisc.push(pCortexFrame3);
 		g_FrameBufferMiscSize++;
 	}
@@ -293,6 +293,8 @@ void motion::WatchFrameBuffer() {
 			g_FrameBuffer.pop(pCortexFrame);
 			g_FrameBufferSize--;
 
+			int testDbg = g_FrameBufferSize;
+			long testDbg2 = long(pCortexFrame->pFrame);
 			Cortex_FreeFrame(pCortexFrame->pFrame);
 			delete pCortexFrame->pFrame;
 			delete pCortexFrame;

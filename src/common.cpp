@@ -126,10 +126,12 @@ bool common::Trigger(float startTimeAgo, float endTimeAgo, bool allowPendingSave
 	}
 
 	// Is there currently a conflicting trigger queued? If so, don't trigger
-	if (g_LastTriggerPrefix != "") {
+	/* This condition is already enforced by "trigger_requires_photrons_ready"... or not? (TODO)
+	if (g_LastTriggerPrefix != "" && allowPendingSave) {
 		logging::Log("[HARDWARE] Could not send hardware trigger --- other trigger in progress...");
 		return  false;
 	}
+	*/
 
 	// Trigger recording!!
 	hardware::SendTrigger();
@@ -207,7 +209,10 @@ void common::SaveToDisk(bool save, const char* prefix) {
 						}
 
 					}, cpr::Url{ cmd.c_str() });
+
 				}, command);
+
+				logging::Log("[PHOTRON] Notified photron client %d", clientID);
 
 				photron::AddBusy();
 			}
