@@ -79,8 +79,10 @@ def interp(data, v, transform='mean'):
     #y = np.linspace( -40, 560, 600/40)
     #x = np.linspace(-25*28, 25*28, 56)
     #y = np.linspace(-30* 1, 30*25, 26)
-    x = np.linspace(-50 * 14, 50*14, 28)
-    y = np.linspace(-50 *  1, 50*14, 15)
+    #x = np.linspace(-50 * 14, 50*14, 28)
+    #y = np.linspace(-50 *  1, 50*14, 15)
+    x = np.linspace(-50 * 13, 50*13, 13)
+    y = np.linspace(-100*  1, 50*14, 8 )
 
     xi, yi = np.meshgrid(x, y)
     zi = None
