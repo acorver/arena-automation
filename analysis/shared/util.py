@@ -26,7 +26,7 @@ from tkinter import simpledialog
 
 Frame = collections.namedtuple('Frame', 'frame pos vertices trajectory time nearbyVertices')
 
-MocapFrame = collections.namedtuple('MocapFrame', 'byteOffset frameID time yframes unidentifiedVertices centroids')
+MocapFrame = collections.namedtuple('MocapFrame', 'byteOffset frameID time yframes unidentifiedVertices centroids calibrationFile')
 
 RawFrame = collections.namedtuple('RawFrame', 'cameraID width height centroids')
 Centroid = collections.namedtuple('Centroid', 'x y q')
@@ -61,7 +61,7 @@ def askForExtractionSettings():
     root.withdraw()
     numCameras = 0
     filepaths = filedialog.askdirectory(title="Select the directory to process.")
-    dirs = list(root.tk.splitlist(filepaths))
+    dirs = [filepaths,] #list(root.tk.splitlist(filepaths))
     
     # Get all the msgpack files in the directory (we don't choose .raw files, even where available.
     # The assumption is the relevant script will switch to the .raw.msgpack file where necessary.)
@@ -69,7 +69,8 @@ def askForExtractionSettings():
     for dir in dirs:
         dataFiles = [x for x in os.listdir(dir) if x.endswith('.msgpack')]
         if len(dataFiles) > 1:
-            dataFiles = [x for x in os.listdir(dir) if not x.endswith('.raw.msgpack')]
+            dataFiles = [x for x in os.listdir(dir) if \
+                x.endswith('.msgpack') and not x.endswith('.raw.msgpack')]
             if len(dataFiles) != 1:
                 # There should only be one or two msgpack files in a directory, at most one 
                 # .msgpack file, and at most one .raw.msgpack. If these requirements are not 
@@ -253,11 +254,16 @@ class MocapFrameIterator:
                     cs = [Centroid(y[0], y[1], y[2]) for y in c[3]]
                     rf = RawFrame(c[0], c[1], c[2], cs)
                     centroids[rf.cameraID] = rf
-                
+            
+            # Get calfile, if it exists
+            calfile = ''
+            if len(x) >= 8:
+                calfile = x[7]
+            
             # Done!
             if self.numFrames == None or self.numFramesYielded < self.numFrames:
                 self.numFramesYielded += 1
-                return MocapFrame(byteOffset, iframe, timestamp, yframes, unidentifiedVertices, centroids)
+                return MocapFrame(byteOffset, iframe, timestamp, yframes, unidentifiedVertices, centroids, calfile)
             else:
                 self.stopIteration()
         except msgpack.OutOfData:

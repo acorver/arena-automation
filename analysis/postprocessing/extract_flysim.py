@@ -17,13 +17,16 @@ if __name__ == "__main__":
 # Imports for this script
 # =======================================================================================
 
-import msgpack, multiprocessing, warnings
+import msgpack, multiprocessing, threading, warnings
+import multiprocessing.pool
 import numpy as np
 import numpy_groupies as npg
 from time import time
 import statsmodels.api as sm
 from functools import partial
 import pandas as pd
+from time import sleep
+import datetime
 
 from shared import util
 from postprocessing import extract_perching_locations
@@ -33,10 +36,6 @@ DEBUG = False
 IGNORE_COUNT = False
 
 # Manually overwrite what file is processed (for debugging purposes)
-#SINGLEFILE = '2016-11-07 12-51-23_Cortex.msgpack' # SINGLEFILE = None
-#SINGLEFILE = '2016-11-11 12-20-41_Cortex.msgpack'
-#SINGLEFILE = '2016-12-10 12-18-45.msgpack'
-#SINGLEFILE = '2017-03-21 14-18-21.msgpack'
 SINGLEFILE = ''
 
 # Set "overwrite" to True to overwrite existing files
@@ -54,6 +53,7 @@ TRAJ_MAXDIST = 75
 # Minimum displacement a trajectory should have to be saved
 TRAJ_SAVE_MINDIST = 500
 TRAJ_SAVE_MINLEN  = 200
+MAX_FLYSIM_DURATION_FRAMES = 3000
 
 # Number of trajectories saved
 numSavedTraj = 0
@@ -62,7 +62,335 @@ numSavedTraj = 0
 # Determine whether a trajectory is a FlySim trajectory, then save it
 # =======================================================================================
 
-def processTrajectory(trajectory, fo, foTracking):
+def trajectoryBBox(traj):
+    minBound = np.array([ sys.float_info.max for i in range(3)])
+    maxBound = np.array([-sys.float_info.max for i in range(3)])
+
+    for t in traj:
+        minBound = np.minimum(t[2], minBound)
+        maxBound = np.maximum(t[2], maxBound)
+
+    bboxSpan = np.linalg.norm( maxBound - minBound )
+    
+    return minBound, maxBound, bboxSpan
+
+def processTrajectory(trajectory, output, outputTracking, workerID, numTrajectories):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        
+        # Find the best matching markers in each frame (currently multiple markers are added per frame 
+        # based on proximity
+        bestMarkers = {}
+        previframe = None
+        for t in trajectory:
+            iframe = t[1]
+            if not iframe in bestMarkers:
+                bestMarkers[iframe] = t
+                previframe = iframe
+            else:
+                eprev = bestMarkers[iframe]
+        traj = [list(x)+[b] for x in trajectory]
+
+        # Can this be a flysim trajectory? Required minimum amount of displacement
+        minBound, maxBound, bboxSpan = trajectoryBBox(trajectory)
+        isDistOK = (bboxSpan > TRAJ_SAVE_MINDIST)
+
+        # TODO: Check if points accompany Yframe at all times... if so, this is head/wing/etc. marker, not flysim
+        dstFromYframe = np.array([ np.nanmin([np.linalg.norm(t[2]-y) for y in t[3]]) if len(t[3])>0 \
+            else float('NaN') for t in trajectory])
+        dstFromYframeMean = np.nanmean(dstFromYframe, axis=0)
+        dstFromYframeSD   = np.nanstd(dstFromYframe, axis=0)
+        if np.isnan(dstFromYframeMean):
+            dstFromYframeMean = np.inf
+        if np.isnan(dstFromYframeSD):
+            dstFromYframeSD = 0
+
+        # Check direction of takeoff
+        data = np.array([x[2] for x in trajectory])
+        x    = [a[0] for a in data]
+        y    = [a[1] for a in data]
+        z    = [a[2] for a in data]
+        A    = np.vstack([x, y, np.ones(len(x))]).T
+
+        f = sm.OLS(z, A).fit() 
+        R2 = f.rsquared
+        params = f.params
+
+        isDirOK = ((R2 > 0.5) and np.linalg.norm(params[0:2] - np.array([0, 0.5])) < 2.0)
+    
+        # Check minimum length
+        isLenOK = (len(trajectory) > TRAJ_SAVE_MINLEN)
+        
+        # Check minimum Z (Flysim currently never goes below ~200)
+        minz = np.nanmin(np.array(z))
+        
+        # Check variance of points in each frame
+        def means(c, x): 
+            x['r'+c] = x[c] - np.repeat(x[c].mean(skipna=True), len(x.index))
+            return x
+        
+        df = pd.DataFrame( {'f': [t[1] for t in trajectory], 'x': x, 'y': y, 'z': z} )
+        df = df.groupby('f').apply(partial(means, 'x'))
+        df = df.groupby('f').apply(partial(means, 'y'))
+        df = df.groupby('f').apply(partial(means, 'z'))
+        
+        stds = [df['r'+c].std (skipna=True) for c in ['x','y','z']]
+        ptStd = np.nansum(stds)
+        
+        # Find start and end point of motion (first acceleration)
+        """
+        def _firstMotionFrame(v):
+            curpos
+            return 0
+        motionStartFrame = _firstMotionFrame(trajectory)
+        motionEndFrame   = _firstMotionFrame(reversed(trajectory))
+        """
+        
+        # Enforce: 
+        #   o minimum trajectory length of 70 frames, 
+        #   o minimum distance traveled
+        #   o direction along x dimension
+        is_flysim = isDistOK and isLenOK and ptStd < 5.5 and dstFromYframeMean > 80 and minz >= 200
+
+        if isLenOK and isDistOK:
+            # Save trajectory 
+            trajID = numTrajectories + (workerID+1) * 100000
+            fStart = min([t[1] for t in trajectory])
+            fEnd   = max([t[1] for t in trajectory])
+            output.put( ','.join([str(x) for x in [trajID, fStart, fEnd, is_flysim, 
+                np.linalg.norm(params[0:2] - np.array([0, 0.5])), 
+                R2, dstFromYframeMean, dstFromYframeSD, isDistOK, isLenOK, isDirOK, ptStd] + stds]))
+            
+            # Save the flysim trajectory
+            for t in trajectory:
+                outputTracking.put( ','.join([str(x) for x in [trajID, t[1], ] + t[2].tolist() ]))
+            
+            # Increment trajectory ID
+            numTrajectories += 1
+    
+    return numTrajectories
+
+# =======================================================================================
+# Extract trajectories (async supported)
+# =======================================================================================
+
+# Worker function
+def extractFlysim_Worker(tasks, output, outputTracking):
+        
+    # TODO: Check if this workerID matches the workerID sent by main process! (-1 because process ID's are 1-indexed)
+    workerIDFromProcess = (multiprocessing.process.current_process()._identity[0]-1) if not DEBUG else 0
+    
+    # Working variables
+    openTrajectories = []
+    trajectoryID = 0 
+    done = False
+    numTrajectories = 0
+    
+    while not done:
+        taskList = tasks[workerIDFromProcess].get()
+        # Are all frames read?
+        if isinstance(taskList, str) and taskList == 'NO_FRAMES_LEFT':
+            # Process the remaining trajectories
+            for t in openTrajectories:
+                numTrajectories = processTrajectory(t, output, outputTracking, workerID, numTrajectories)
+            # Signal that we're done!!
+            output.put('DONE:'+str(workerIDFromProcess))
+            done = True
+        else:
+            # Loop through each frame
+            for frame, maxNewTrajFrame, workerID in taskList:
+                # Calculate Yframe mean positions
+                yframes = [np.nanmean(x.vertices, axis=0) for x in frame.yframes]
+            
+                # o Remove "trajectories" that have too many points... (currently > 20 second = 4000 frames).
+                #   These are not flysim trajectories but likely stationary points, and we will loose much 
+                #   time and RAM space by keeping around such trajectories
+                # o Also remove trajectories that are too old (haven't been updated recently)
+                i = 0
+                while i < len(openTrajectories):
+                    
+                    if len( openTrajectories[i] ) > MAX_FLYSIM_DURATION_FRAMES or \
+                        (frame.frameID - openTrajectories[i][-1][1]) > TRAJ_TIMEOUT:
+                        if len( openTrajectories[i] ) <= MAX_FLYSIM_DURATION_FRAMES:
+                            numTrajectories = processTrajectory(openTrajectories[i], \
+                                output, outputTracking, workerIDFromProcess, numTrajectories)    
+                        del openTrajectories[i]
+                        i = 0
+                    else:
+                        i += 1
+                
+                # Are we done with processing?
+                if len(openTrajectories) == 0 and frame.frameID > maxNewTrajFrame:
+                    output.put('DONE:'+str(workerIDFromProcess))
+                    done = True
+            
+                # Loop through unIDed points
+                for pos in frame.unidentifiedVertices:
+                    # Find corresponding trajectory index 
+                    minDist = 1e6
+                    t = -1
+                    for i in range(len(openTrajectories)):
+                        d = np.linalg.norm(pos - openTrajectories[i][-1][2])
+                        if d < minDist:
+                            minDist = d
+                            t = i
+                    
+                    # Recent enough... add data to existing or new trajectory 
+                    if t != -1 and minDist < TRAJ_MAXDIST: # and openTrajectories[t][-1][1] != iframe:
+                        openTrajectories[t].append( (openTrajectories[t][-1][0], frame.frameID, pos, yframes) )
+                        # If this trajectory has been stationary for too long, split it
+                        # This happens when the FlySim bead doesn't go completely out of view... What are multiple 
+                        # trajectories will then be seen as one
+                        #     - Compute volume spanned by last 3 seconds (600 frames) of points
+                        if len(openTrajectories[t]) > 600:
+                            minBound, maxBound, bboxSpan = trajectoryBBox(openTrajectories[t][(-600):(-1)])
+                            if bboxSpan < 10:
+                                numTrajectories = processTrajectory(openTrajectories[t], output, \
+                                    outputTracking, workerIDFromProcess, numTrajectories)
+                                del openTrajectories[t]
+                    else:
+                        # Create new trajectory (only if allowed)
+                        if frame.frameID <= maxNewTrajFrame:
+                            trajectoryID += 1
+                            openTrajectories.append([(trajectoryID, frame.frameID, pos, yframes),])
+            # Signal that this worker finished processing this chunk of frames
+            tasks[workerIDFromProcess].task_done()
+
+#
+# Note: To parallelize the discovery of FlySim trajectories, the processFile(...) function 
+#       splits the motion capture file into N contiguous blocks of frames. Each worker 
+#       process will process these frames in parallel. However, the frames are still linearly 
+#       read in, in a multiplexed way, but are then passed to the working processes.
+#
+def processFile(fname, async=True):
+    
+    # Number of CPUs to use (due to IO reading limits, only ? workers appear to be necessary 
+    # for maximum performance)
+    NUM_WORKERS = 10 if not DEBUG else 1
+    
+    # Output file names
+    foName         = fname.replace('.raw.msgpack','.msgpack').replace('.msgpack','.flysim.csv')
+    foNameTracking = fname.replace('.raw.msgpack','.msgpack').replace('.msgpack','.flysim.tracking.csv')
+    
+    # Determine total number of frames (this also forces the creation of the data file index... important!)
+    totalNumFrames, minFrameIdx, maxFrameIdx = util.countRecords(fname, includeFrameRange=True)
+    print("Total number of records: "+str(totalNumFrames))
+    
+    # An array of queues of frames to process, one queue for each worker process
+    tasks = [multiprocessing.JoinableQueue() for i in range(NUM_WORKERS)]
+    
+    # An output queue for .flysim.csv data
+    output = multiprocessing.Queue()
+    
+    # An output queue for .flysim.tracking.csv data
+    outputTracking = multiprocessing.Queue()
+
+    # Create worker threads
+    pool = None
+    if async:
+        if DEBUG:
+            pool = multiprocessing.pool.ThreadPool(NUM_WORKERS, extractFlysim_Worker, (tasks, output, outputTracking))
+        else:
+            pool = multiprocessing.Pool(NUM_WORKERS, extractFlysim_Worker, (tasks, output, outputTracking))
+    
+    # Current reading positions in file for each of the worker processes
+    currentStartFramesOfTasks = [int(minFrameIdx + (maxFrameIdx-minFrameIdx) * i/NUM_WORKERS) \
+        for i in range(NUM_WORKERS)]
+    
+    # The maximum frame index at which the worker process is allowed to start a new trajectory (but it's 
+    # still allowed to continue an old trajectory)
+    maxNewTrajFrameOfTasks = [int(x + (maxFrameIdx-minFrameIdx) / NUM_WORKERS)+1 for x in currentStartFramesOfTasks]
+    
+    # Worker status
+    workerDone = [False for i in range(NUM_WORKERS)]
+    
+    # Counter to keep track of how many frames we've processed
+    numFramesProcessed = 0
+    
+    # Start queueing frames
+    lastProgressReportTime = datetime.datetime.now()
+    with open(foName,'w') as fo, open(foNameTracking,'w') as foTracking:
+        
+        # Write header
+        fo.write('flysimTraj, framestart, frameend, is_flysim, score_dir, score_r2, distanceFromYframe, '+
+                 'distanceFromYframeSD, dist_ok, len_ok, dir_ok, std, stdX, stdY, stdZ\n')
+        
+        # Write header
+        foTracking.write('trajectory,frame,x,y,z\n')
+        
+        # Process all frames
+        while True:
+            # Add frames to each worker queue
+            for workerID in range(len(tasks)):
+                # If there are fewer than 3 chunks of frames left for a given worker process, add more frames
+                readAllFrames = False
+                if not workerDone[workerID]:
+                    if tasks[workerID].qsize() < 3:
+                        # Create an iterator over MoCap frames
+                        mocap = util.MocapFrameIterator(fname, \
+                            startFrame=currentStartFramesOfTasks[workerID])
+                        # We send frames to be processed in batches, which should speed up processing
+                        frames = []
+                        try:
+                            for i in range(2000):
+                                frames.append( (mocap.__next__(), maxNewTrajFrameOfTasks[workerID], workerID) )
+                            # Close iterator
+                            mocap.stopIteration(raiseStopIteration=False)
+                        except StopIteration:
+                            readAllFrames = True
+                        
+                        # Keep counter of number of processed frames
+                        numFramesProcessed += len(frames)
+                        # Submit frames for processing
+                        tasks[workerID].put( frames )
+                        # Now remember to continue with the following frame
+                        currentStartFramesOfTasks[workerID] = frames[-1][0].frameID + 1
+                
+                # Now see if this worker should shut down
+                if readAllFrames:
+                    # By pushing "NO_FRAMES_LEFT", we are signaling to the worker processes that all frames have been read
+                    tasks[workerID].put( 'NO_FRAMES_LEFT' )
+                    print("No frames left for worker "+str(workerID))
+                
+            # Update on progress
+            if (datetime.datetime.now() - lastProgressReportTime).total_seconds() > 5:
+                lastProgressReportTime = datetime.datetime.now()
+                s = "/" + str(totalNumFrames)+" ("+'{0:.{1}f}'.format(
+                        100*numFramesProcessed/totalNumFrames, 3)+'%)'
+                print("Processed "+str(numFramesProcessed)+s+" frames")
+                
+            # Limit how often this runs
+            sleep(0.5)
+                
+            # Write output
+            while not output.empty():
+                s = output.get()
+                if 'DONE:' in s:
+                    wid = int(s.replace('DONE:',''))
+                    print("Worker done: "+str(wid))
+                    workerDone[wid] = True
+                else:
+                    fo.write(s+'\n')
+                    fo.flush()
+                
+            # Write tracking info
+            while not outputTracking.empty():
+                s = outputTracking.get()
+                foTracking.write(s+'\n')
+                foTracking.flush()
+                
+            # Break when all worker processes have exited
+            allWorkersDone = True if len([x for x in workerDone if not x])==0 else False
+            if allWorkersDone: 
+                break
+    # Done!
+    print("Done extracting FlySim trials!")
+
+# =======================================================================================
+# [DEPRECATED] Determine whether a trajectory is a FlySim trajectory, then save it
+# =======================================================================================
+
+def processTrajectorySync(trajectory, fo, foTracking):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
 
@@ -136,16 +464,16 @@ def processTrajectory(trajectory, fo, foTracking):
                 foTracking.write( ','.join([str(x) for x in [t[0], t[1], ] + t[2].tolist() ]) + '\n' )
 
 # =======================================================================================
-# Extract trajectories
+# [DEPRECATED] Extract trajectories synchronously
 # =======================================================================================
 
-def processFile(file):
+def processFileSync(file):
     
     openTrajectories = []
 
     # Output file names
-    foName         = file.replace('.msgpack','.flysim.csv')
-    foNameTracking = file.replace('.msgpack','.flysim.tracking.csv')
+    foName         = file.replace('.raw.msgpack','.msgpack').replace('.msgpack','.flysim.csv')
+    foNameTracking = file.replace('.raw.msgpack','.msgpack').replace('.msgpack','.flysim.tracking.csv')
 
     # Don't overwrite existing file
     if not OVERWRITE and os.path.isfile( foName ): 
@@ -158,9 +486,7 @@ def processFile(file):
     if DEBUG or IGNORE_COUNT:
         totalNumRecords = 1e6
     else:
-        with open(file,'rb') as f:
-            for x in msgpack.Unpacker(f):
-                totalNumRecords += 1
+        totalNumRecords = util.countRecords(file)
         print("Total number of records: "+str(totalNumRecords))
     
     # Start loop
@@ -191,6 +517,21 @@ def processFile(file):
             # Calculate Yframe mean positions
             yframes = [np.nanmean(x.vertices, axis=0) for x in frame.yframes]
             
+            # o Remove "trajectories" that have too many points... (currently > 20 second = 4000 frames).
+            #   These are not flysim trajectories but likely stationary points, and we will loose much 
+            #   time and RAM space by keeping around such trajectories
+            # o Also remove trajectories that are too old (haven't been updated recently)
+            i = 0
+            while i < len(openTrajectories):
+                if len( openTrajectories[i] ) > 4000 or \
+                    (frame.frameID - openTrajectories[t][-1][1]) > TRAJ_TIMEOUT:
+                    if len( openTrajectories[i] ) <= 4000:
+                        processTrajectorySync(openTrajectories[i], fo, foTracking)
+                    del openTrajectories[i]
+                    i = 0
+                else:
+                    i += 1
+            
             # Loop through unIDed points
             for pos in frame.unidentifiedVertices:
                 # Find corresponding trajectory index 
@@ -202,24 +543,16 @@ def processFile(file):
                         minDist = d
                         t = i
                     
-                # Recent enough trajectory?
-                if t != -1 and (frame.frameID - openTrajectories[t][-1][1]) > TRAJ_TIMEOUT:
-                    # Timed out... Now:
-                    #   o Determine whether this is a flySim trajectory
-                    #   o Remove this trajectory from the open list
-                    processTrajectory(openTrajectories[t], fo, foTracking)
-                    del openTrajectories[t]
-                else:   
-                    # Recent enough... add data to existing or new trajectory 
-                    if t != -1 and minDist < TRAJ_MAXDIST: # and openTrajectories[t][-1][1] != iframe:
-                        openTrajectories[t].append( (openTrajectories[t][-1][0], frame.frameID, pos, yframes) )
-                    else:
-                        trajectoryID += 1
-                        openTrajectories.append([(trajectoryID, frame.frameID, pos, yframes),])
+                # Recent enough... add data to existing or new trajectory 
+                if t != -1 and minDist < TRAJ_MAXDIST: # and openTrajectories[t][-1][1] != iframe:
+                    openTrajectories[t].append( (openTrajectories[t][-1][0], frame.frameID, pos, yframes) )
+                else:
+                    trajectoryID += 1
+                    openTrajectories.append([(trajectoryID, frame.frameID, pos, yframes),])
         
         # Process the remaining trajectories
         for t in openTrajectories:
-            processTrajectory(t, fo, foTracking)
+            processTrajectorySync(t, fo, foTracking)
     
 # =======================================================================================
 # Main loop
@@ -235,9 +568,12 @@ def run(async=False, settings = None):
             settings = util.askForExtractionSettings()
         
         if not DEBUG:
-            with multiprocessing.Pool(processes=16) as pool:
-                (pool.map_async if async else pool.map)(processFile, settings.files)
-                return pool
+            if len(settings.files) == 1:
+                processFile(settings.files[0])
+            else:
+                with multiprocessing.Pool(processes=16) as pool:
+                    (pool.map_async if async else pool.map)(processFile, settings.files)
+                    return pool
         else:
             for file in settings.files:
                 processFile(file)

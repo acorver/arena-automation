@@ -239,12 +239,15 @@ def processFile(file):
     print(dbgHeader+"Started reading flysim")
     fsTracking = util.loadFlySim(file) 
     flysim = {}
-    for (rowid, row) in fsTracking.iterrows():
-        frame = int(row['frame'])
-        if row['is_flysim'] and row['framestart'] <= frame and \
-            frame <= row['frameend']:
-            flysim[frame] = (row['flysimTraj'], np.array([row['flysim.'+c] for c in ['x','y','z']]))
-    print(dbgHeader+"Finished reading flysim")
+    if fsTracking != None:
+        for (rowid, row) in fsTracking.iterrows():
+            frame = int(row['frame'])
+            if row['is_flysim'] and row['framestart'] <= frame and \
+                frame <= row['frameend']:
+                flysim[frame] = (row['flysimTraj'], np.array([row['flysim.'+c] for c in ['x','y','z']]))
+        print(dbgHeader+"Finished reading flysim")
+    else:
+        print(dbgHeader+"Failed to read flysim... processed flysim data not found")
     
     # Open trajectories
     openTrajectories = []
@@ -328,9 +331,12 @@ def run(async=False, settings=None):
             settings = util.askForExtractionSettings()
 
         if not DEBUG:
-            with multiprocessing.Pool(processes=16) as pool:
-                (pool.map_async if async else pool.map)(processFile, settings.files)
-                return pool
+            if len(settings.files) == 1:
+                processFile(settings.files[0])
+            else:
+                with multiprocessing.Pool(processes=16) as pool:
+                    (pool.map_async if async else pool.map)(processFile, settings.files)
+                    return pool
         else:
             for file in settings.files:
                 processFile(file)

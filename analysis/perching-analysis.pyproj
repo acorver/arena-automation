@@ -5,7 +5,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{76b3e4b1-9cd1-4076-a48b-7f13f62bc0b8}</ProjectGuid>
     <ProjectHome />
-    <StartupFile>postprocessing\extract_mac_trigger_frames.py</StartupFile>
+    <StartupFile>test.py</StartupFile>
     <SearchPath />
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
@@ -33,10 +33,20 @@
     <Compile Include="postprocessing\create_highspeed_links.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="postprocessing\extract_mac_trigger_frames.py">
+    <Compile Include="postprocessing\extract_mocap_trigger.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="postprocessing\extract_raw_mac_data.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\extract_unided_xyz.py" />
+    <Compile Include="postprocessing\merge_daily_data.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\recompute_xyz.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="postprocessing\test.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="shared\util.py">
@@ -46,7 +56,10 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="shared\__init__.py" />
-    <Compile Include="test.py" />
+    <Compile Include="test.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="test_what_is_this.py" />
     <Compile Include="update_all.py">
       <SubType>Code</SubType>
     </Compile>

@@ -19,10 +19,10 @@ if __name__ == "__main__":
 # Imports for this script
 # =======================================================================================
 
-pass
+import ConfigParser
 
 # =======================================================================================
-# Process a given day
+# Process a given .raw.msgpack file
 # =======================================================================================
 
 # TODO: Add function to util to iterate over all markers in frame (regardless of whether they 
@@ -30,9 +30,31 @@ pass
 
 def processFile(fname):
     
+    # Make sure the input file type is valid
+    if not fname.endswith('.raw.msgpack'):
+        raise Exception("Input file needs to be of type .raw.msgpack.")
+        return
+    
+    
+    # List of camera indices
     cameras = list(range(1,1+18))
     
+    # Cache of calibration settings
+    calibrationSettings = {}
+    
+    # Loop through frames
     for frame in util.MocapFrameIterator(fname):
+        # Get calibration coefficients
+        if not frame.calibrationFile in calibrationSettings:
+            config = ConfigParser.ConfigParser()
+            config.read(calibrationFile)
+            s = config.get(
+                "CalibrationCoeffecients", # this is not a typo! This typo was introduced by Cortex in all its .cal files
+                "NumberOfCoeffecientsPerCamera")
+            calCoeff = [[float(y.strip()) for y in x.split(',')] for x in s.split('\n')[1:]]
+            calibrationSettings[frame.calibrationFile] = calCoeff            
+        
+        # Now process markers
         markers = util.getAllMarkersInFrame(frame)
         markersProjTo2D = {}
         for marker in markers:

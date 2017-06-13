@@ -23,6 +23,7 @@ from postprocessing import extract_log_info
 from postprocessing import extract_headmovements
 from postprocessing import create_highspeed_links
 from postprocessing import plot_takeoffs
+from postprocessing import merge_daily_data
 
 from shared import util
 
@@ -38,6 +39,9 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 # =======================================================================================
 
 def updateAll(settings):
+    # Create daily files (by default, we now always compute the data over entire days, rather than segments)
+    merge_daily_data.run(settings)
+    
     # Process data with Python scripts
     p1 = extract_flysim.run(async = False, settings = settings)
     print("Done processing FlySim, now extracting log info.")
@@ -57,10 +61,10 @@ def updateAll(settings):
     p3 = extract_perching_locations.run(async=False, settings = settings)
     
     print("Done computing takeoffs, now extracting raw camera data.")
-    p4 = extract_raw_mac_data.run(async = False, settings = settings)
+    #p4 = extract_raw_mac_data.run(async = False, settings = settings)
 
     print("Done extracting raw camera data, now extracting alignment triggers.")
-    extract_mac_trigger.run(settings = settings)
+    #extract_mac_trigger.run(settings = settings)
     
     #extract_perching_orientations.run(async=True)
     #extract_headmovements.run()

@@ -59,9 +59,12 @@ def run(async=False, settings=None):
     if settings == None:
         settings = util.askForExtractionSettings()
 
-    with multiprocessing.Pool(processes=12) as pool:
-        (pool.map_async if async else pool.map)(processFile, settings.files)
-        return pool
+    if len(settings.files) == 1:
+        processFile(settings.files[0])
+    else:
+        with multiprocessing.Pool(processes=12) as pool:
+            (pool.map_async if async else pool.map)(processFile, settings.files)
+            return pool
     
     return None
 

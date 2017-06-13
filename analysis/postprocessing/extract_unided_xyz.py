@@ -4,7 +4,7 @@
 # =======================================================================================
 
 import os, sys
-if __name__ == "__main__": 
+if __name__ == "__main__":
     p = os.path.dirname(os.path.abspath(__file__))
     os.chdir(os.path.join(p,'../../data'))
     sys.path.insert(0, os.path.join(p,'../'))
@@ -33,28 +33,13 @@ CORTEX_NAN  = 9999999
 
 def processFile(file):
     print("Started file: "+file)
-    outfile = file.replace('.msgpack','.xyz.csv')
+    outfile = file.replace('.msgpack','.unids.csv')
     try:
         if OVERWRITE or not os.path.isfile( outfile ):
-            i = 0
             with open(outfile, 'w') as fo:
-                with open(file,'rb') as f:
-                    filename = file
-                    if '/' in filename:
-                        filename = filename[filename.rfind('/')+1:]
-                    for x in msgpack.Unpacker(f):
-                        if not isinstance(x, int):
-                            # Get time
-                            dt = datetime.fromtimestamp(x[5]//1000).strftime('%Y-%m-%d %H:%M:%S')
-                            # Process ID'ed bodies
-                            for b in x[2]:
-                                # Extract marker points
-                                pos = np.nanmean([[z if z!=CORTEX_NAN else float('NaN') for z in y] 
-                                    for y in b[1]], axis=0)
-                                fo.write(','.join([dt, filename, str(b[0]), str(x[0])] + [str(y) for y in pos]) + '\n')
-                        i+=1
-                        if ((i%1000000)==0): 
-                            print("[" + file + "] Processed "+str(i)+" frames")
+                for frame in util.iterMocapFrames(file):
+                    for vi,v in zip(range(len(frame.unidentifiedVertices)),frame.unidentifiedVertices):
+                        fo.write(','.join([str(x) for x in [frame.frameID,vi]+v.tolist()])+'\n')
         else:
             print("Skipping file: "+file)
     except Exception as e:
@@ -63,7 +48,7 @@ def processFile(file):
 
 def run(async=False):
     if SINGLE_FILE == "":
-        settings = util.askForExtractionSettings()    
+        settings = util.askForExtractionSettings()
 
         if len(settings.files) > 1:
             with multiprocessing.Pool(processes=12) as pool:
@@ -74,5 +59,5 @@ def run(async=False):
     else:
         processFile(SINGLE_FILE)
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
     run()

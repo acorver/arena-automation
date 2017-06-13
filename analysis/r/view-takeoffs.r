@@ -22,7 +22,7 @@ setwd('Z:/people/Abel/arena-automation/data')
 
 # Function to merge multiple datasets
 readall <- function(filename) {
-  files = list.files(".")
+  files = list.files(".", recursive=TRUE)
   files = files[grep(filename, files, perl=TRUE)]
   d <- lapply(seq_along(files), FUN=function(n){
     x <- fread(files[n])
@@ -37,7 +37,8 @@ readall <- function(filename) {
 # ============================================================
 
 # The data file base name to process
-filebase <- '2017-03-(22|21).*'
+#filebase <- '2017-04-20 14-08-04/*'
+filebase <- '2017-05-25/2017-05-25'
 
 # Create filenames
 f.takeoffs <- paste0(filebase, '.takeoffs.csv')
@@ -102,21 +103,29 @@ plot3d(
   f$x,
   f$y,
   f$z,
-  col=(f$trajectory+f$dataset*1e6),
+  col=(f$trajectory+f$dataset.x*1e6),
   size=1)
 
 # ============================================================
 # Investigate trajectories classified as non-Flysim
 # ============================================================
 
-fsIDs <- unique(flysim.t[!flysim.t$is_flysim,]$trajectory)
+f <- flysim.t[!flysim.t$is_flysim,]
+fsIDs <- unique(f$trajectory)
 plt <- function(id) {
-  f <- f[f$trajectory==fsIDs[id],]
+  f2 <- f[f$trajectory==fsIDs[id],]
+  print(
+    c(unique(f2$dir_ok), 
+    unique(f2$len_ok), 
+    unique(f2$dist_ok),
+    unique(f2$std),
+    unique(f2$distanceFromYframe)
+    ))
   plot3d(
-    f$x,
-    f$y,
-    f$z,
-    col=(f$trajectory+f$dataset*1e6),
+    f2$x,
+    f2$y,
+    f2$z,
+    col=f2$trajectory + f2$dataset.x,
     size=1)
 }
 open3d()
@@ -124,3 +133,6 @@ twiddle(
   plt(id),
   id = knob(c(1, length(fsIDs)),1),
   auto = FALSE)
+
+
+

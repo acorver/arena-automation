@@ -112,9 +112,12 @@ def run(async=False):
     if DEBUG:
         processFile(files[0])
     else:
-        with multiprocessing.Pool(processes=16) as pool:
-            (pool.map_async if async else pool.map)(processFile, files)
-            return pool
+        if len(settings.files) == 1:
+            processFile(settings.files[0])
+        else:
+            with multiprocessing.Pool(processes=16) as pool:
+                (pool.map_async if async else pool.map)(processFile, files)
+                return pool
     
 if __name__ == '__main__':    
     run()
