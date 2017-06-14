@@ -909,7 +909,7 @@ void updateTrials(long elapsedTime) {
     }
     
     // Did we reach our goal for the current segment?
-    if ( abs(g_CurPosX - targetPositionX) > MAX_X_ERROR && g_TimeUntilTrial > -5e6 && 
+    if ( abs(g_CurPosX - targetPositionX) > MAX_X_ERROR && g_TimeUntilTrial > -8e6 && 
       (abs(g_CurPosX-g_MinPosX) > 20 || targetVelocityX > 0) && 
       (abs(g_CurPosX-g_MaxPosX) > 20 || targetVelocityX < 0) ) {
       
@@ -991,11 +991,11 @@ void updateTrials(long elapsedTime) {
         int choice = random(0,2 + 0);
         if (choice == 0) {
           height = 400;
-          speed1base = 1000;
+          speed1base = 1100;
           speedup = 400;
         } else if (choice == 1) {
           height = 400;
-          speed1base = 1000;
+          speed1base = 1100;
           speedup = -400;
         } else {
           // Do nothing... hence the range of random(...) determine the percentage of times we use this fixed set
@@ -1007,10 +1007,10 @@ void updateTrials(long elapsedTime) {
       long speed2 = dir <= 0 ? speed1base : speed1base+speedup;
       
       long tWait;
-      if (g_TrialIdx < 5) {
-        tWait = random(15, 30) * 1000000;
+      if (g_TrialIdx < 3) {
+        tWait = random(30, 60) * 1000000;
       } else {
-        tWait = random(50, 80) * 1000000;
+        tWait = random(60, 90) * 1000000;
       }
 
       // Debug mode? If so, present trials quickly for easier debugging...

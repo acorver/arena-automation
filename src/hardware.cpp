@@ -25,6 +25,8 @@ bool g_DfReady = false;
 
 boost::lockfree::spsc_queue<std::string, boost::lockfree::capacity<256>> g_FlySimCommandQueue;
 
+std::map<int, int> g_CurrentPerchDirections;
+
 Serial* openDevice(int portNumber) {
 	
 	wchar_t buffer[128];
@@ -179,11 +181,12 @@ void hardware::UpdateFlySim() {
 
 			// Log any messages from FlySim
 			if (numBytesRead > 0) {
-				
+
 				std::string msg = std::string("[FLYSIM] ") + strBuf;
 				logging::Log(msg.c_str());
 			}
-		} else {
+		}
+		else {
 			pSerialFlySim = findDevice("FlySim Arduino Controller", &portFlySim);
 			if (!pSerialFlySim) {
 				logging::Log("[HARDWARE] Failed to reconnect to FlySim interface.");
@@ -201,7 +204,7 @@ void hardware::UpdateFlySim() {
 
 long hardware::GetTimeUntilNextFlysimTrialInMS() {
 
-	return (boost::posix_time::second_clock::local_time() - 
+	return (boost::posix_time::second_clock::local_time() -
 		g_NextFlysimTrialTime).total_milliseconds();
 }
 
@@ -234,11 +237,18 @@ void hardware::SendTrigger(bool forceTrigger) {
 		pSerialTrigger->ReadData(serialBuffer, 128);
 		if (serialBuffer[0] == '!') {
 			break;
-		} 
+		}
 	}
 }
 
 void hardware::RotatePerch(int perchIdx, int dir) {
+
+	// Do we need to even attempt to change the direction of rotation of the perch?
+	if (g_CurrentPerchDirections.find(perchIdx) != g_CurrentPerchDirections.end() ) {
+		if (g_CurrentPerchDirections[perchIdx] == dir) {
+			return; // Return... perch already rotating in this direction
+		}
+	}
 
 	if (pSerialPerch) {
 		if (!pSerialPerch->IsConnected()) {
@@ -256,6 +266,7 @@ void hardware::RotatePerch(int perchIdx, int dir) {
 			// will fill up and stall reading!
 			const int BUF_SIZE = 1024 * 256;
 			char serialBuffer[BUF_SIZE];
+			memset(serialBuffer, 0, sizeof(char) * BUF_SIZE);
 			int numBytesRead = pSerialPerch->ReadData(serialBuffer, BUF_SIZE - 1);
 
 			std::cout << serialBuffer << std::endl;
@@ -263,6 +274,9 @@ void hardware::RotatePerch(int perchIdx, int dir) {
 			boost::posix_time::ptime hpct = boost::posix_time::second_clock::local_time();
 
 			pSerialPerch->WriteData(buffer, n);
+
+			// Remember this direction of rotation, so we don't make needless Serial calls
+			g_CurrentPerchDirections[perchIdx] = dir;
 
 			std::cout << "Hardware perch command took : " << (boost::posix_time::second_clock::local_time() - hpct).total_milliseconds() << " milliseconds (read "<< numBytesRead<<" bytes).\n";
 		}
