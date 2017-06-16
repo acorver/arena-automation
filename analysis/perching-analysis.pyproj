@@ -49,6 +49,7 @@
     <Compile Include="postprocessing\test.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="shared\telemetry.py" />
     <Compile Include="shared\util.py">
       <SubType>Code</SubType>
     </Compile>
