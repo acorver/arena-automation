@@ -20,7 +20,7 @@
 // Quick-access settings
 // ================================================================
 
-const bool TRIALS_REQUIRE_PERCH = false;
+const bool TRIALS_REQUIRE_PERCH = true;
 
 #define USE_KANGAROO_FOR_Z false
 
@@ -83,7 +83,7 @@ unsigned long StartTime   = CurrentTime;  // mark the t0 point in microsecond
 
 Encoder Enc2(2, 3); // FlySim desktop model objects
 
-#define MAX_X_ERROR         100                 // Maximum error in Kangaroo positioning that still counts as "goal achieved"
+#define MAX_X_ERROR         32                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
 #define MAX_Z_ERROR         32                  // Maximum error in Kangaroo positioning that still counts as "goal achieved"
 
 long WHEEL_SIZE_X  =  40;
@@ -884,11 +884,10 @@ void updateTrials(long elapsedTime) {
     g_TimeUntilTrial = min( PRE_TRIAL_PERIOD, g_TimeUntilTrial);
   }
   
-  if (!TRIALS_REQUIRE_PERCH || g_DfReadyOnPerch || 
-    g_TimeUntilTrial - elapsedTime >= PRE_TRIAL_PERIOD || g_TimeUntilTrial < PRE_TRIAL_PERIOD) { 
-    
+  if (TRIALS_REQUIRE_PERCH && !g_DfReadyOnPerch && g_TimeUntilTrial >= PRE_TRIAL_PERIOD) {
+    g_TimeUntilTrial = max(g_TimeUntilTrial - elapsedTime, PRE_TRIAL_PERIOD);
+  } else {
     g_TimeUntilTrial -= elapsedTime;
-    //g_VelocityBoostTimeLeft -= elapsedTime;
   }
   
   // Are we close to trial start? If so, start cortex
@@ -988,15 +987,19 @@ void updateTrials(long elapsedTime) {
 
       // Use pre-programmed set of speedup/slowdown trials?
       if (g_TrialsMode.indexOf("fixed_speedup_set")!=-1) {
-        int choice = random(0,2 + 0);
+        int choice = random(0,3 + 0);
         if (choice == 0) {
           height = 400;
-          speed1base = 1100;
+          speed1base = 1000;
           speedup = 400;
         } else if (choice == 1) {
           height = 400;
-          speed1base = 1100;
+          speed1base = 1000;
           speedup = -400;
+        } else if (choice == 2) {
+          height = 400;
+          speed1base = 1000;
+          speedup = 0;
         } else {
           // Do nothing... hence the range of random(...) determine the percentage of times we use this fixed set
         }
@@ -1031,7 +1034,7 @@ void updateTrials(long elapsedTime) {
       // Set appropriate X speed
       g_VelocitySegments[0] = dir * speed1;
       g_VelocitySegments[1] = dir * (random(0, 100) > 0 ? speed2 : speed1);
-      g_VelocitySegmentBounds[0] = - dir * 150 + (g_MinPosX + g_MaxPosX) / 2;
+      g_VelocitySegmentBounds[0] = - dir * 0 + (g_MinPosX + g_MaxPosX) / 2;
       targetPositionX = dst;
       
       // Set appropriate Z position
