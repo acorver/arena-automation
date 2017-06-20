@@ -16,18 +16,12 @@ if __name__ == "__main__":
 # Imports and global constants for this script
 # =======================================================================================
 
-import threading
 import multiprocessing
 from time import sleep
-from time import time
-from queue import Queue
 import pandas as pd, numpy as np
-from shared import util
-import matplotlib.pyplot as plt
-import scipy.misc
-import seaborn as sns
 from ggplot import *
-import concurrent.futures
+import scipy.misc
+from shared import util
 import datetime
 import traceback
 
@@ -45,12 +39,6 @@ def getMaxCamID(fname):
         if i > 5e3:
             break
     return maxCamID
-
-# =======================================================================================
-# Find 
-# =======================================================================================
-
-# ...
 
 # =======================================================================================
 # Find triggerbox markers in a given frame
@@ -146,8 +134,12 @@ def findTriggerBoxInFrame(frame, camID, spacing=None, debug=True):
 
 def findTriggerBoxInFrames(fname, camID, startFrame=None, numFrames=None):
     i = -1
-    for frame in util.iterMocapFrames(fname, startFrame=startFrame, numFrames=numFrames):
-        
+    numFramesProcessed = 0
+    for frame in util.iterMocapFrames(fname, startFrame=startFrame):
+
+        if camID not in frame.centroids:
+            continue
+
         tb, triggered = findTriggerBoxInFrame(frame, camID, spacing=38)
         
         if tb != None:
@@ -168,8 +160,12 @@ def findTriggerBoxInFrames(fname, camID, startFrame=None, numFrames=None):
             yield tbc
             i += 1
 
-        if (i%1000)==0:
-            print("Processed "+str(i)+" frames")
+        numFramesProcessed += 1
+        if numFrames is not None and numFramesProcessed >= numFrames:
+            break
+
+        if (numFramesProcessed%1000)==0:
+            print("Processed "+str(numFramesProcessed)+" frames")
 
 # =======================================================================================
 # Find triggers in parallel
@@ -190,20 +186,21 @@ def findTriggerAsync(frame, camID):
 def findTriggers_Worker(tasks, output, async=True):
     while True:
         taskList = tasks.get()
-        for frame, camID in taskList:
+        for frame, camIDs in taskList:
             if not frame is None:
-                r = findTriggerAsync(frame, camID)
-                if isinstance(r, Exception):
-                    print(r)
-                elif r != None:
-                    # When a trigger was detected write the frame number and camera ID to file
-                    output.put(','.join([str(y) for y in r])) 
+                for camID in camIDs:
+                    r = findTriggerAsync(frame, camID)
+                    if isinstance(r, Exception):
+                        print(r)
+                    elif r != None:
+                        # When a trigger was detected write the frame number and camera ID to file
+                        output.put(','.join([str(y) for y in r]))
         tasks.task_done()
         # If async is false, we break the for loop, so control goes back to findTriggers while loop
         if not async:
             break
 
-def findTriggers(fname, camID, async=True, startFrame=None):
+def findTriggers(fname, camIDs, async=True, startFrame=None):
         
     # Number of CPUs to use (due to IO reading limits, only 8 workers appear to be necessary 
     # for maximum performance)
@@ -226,11 +223,12 @@ def findTriggers(fname, camID, async=True, startFrame=None):
     # Start queueing frames
     numFramesProcessed = 0
     with open(fname.replace('.raw.msgpack','').replace('.msgpack','')+'.led_triggers','w') as fOut:
+        fOut.write('camID,frame,timestamp,timestamp_str\n')
         while True:
             try:
                 numFramesProcessed += 1000
                 # We send frames to be processed in batches, which should speed up processing
-                tasks.put( [(mocap.__next__(), camID) for i in range(1000)] )
+                tasks.put( [(mocap.__next__(), camIDs) for i in range(1000)] )
                 if tasks.qsize() > 100:
                     sleep(1)
                 if (numFramesProcessed%1000)==0:
@@ -252,16 +250,152 @@ def findTriggers(fname, camID, async=True, startFrame=None):
     print("Done searching for triggers.")
 
 # =======================================================================================
-# Test code, to run this as a standalone script
+# Find the camera containing the syncbox
 # =======================================================================================
 
-if __name__ == "__main__":
-    
-    startFrame = None #1588914 - 10
-    camID = 17
-    fname = "../../data/2017-04-20 14-08-04/2017-04-20 14-08-04.raw.msgpack"
-    async = True # False
-    
-    findTriggers(fname, camID, async=async, startFrame=startFrame)
+def findCameraWithSync(fname):
 
-        
+    # Write debug image with all 2d markers
+    plot2dCentroids(fname)
+
+    print("Finding camera's with sync box")
+
+    maxCamID = getMaxCamID(fname)
+
+    NUM_FRAMES_TO_CHECK = 200 * 60
+
+    camsWithSync = []
+    tbs = {}
+
+    for camID in range(maxCamID):
+        tbs[camID] = [x for x in findTriggerBoxInFrames(fname, camID, numFrames=NUM_FRAMES_TO_CHECK)]
+        camsWithSync.append( (camID, len(tbs[camID]) / NUM_FRAMES_TO_CHECK) )
+
+    # Write debug image with identified triggerboxes
+    plotTriggerboxes(fname, tbs)
+
+    # Done!
+    return camsWithSync
+
+# =======================================================================================
+# Produce overlay image of all camera centroids to confirm that triggerbox exists
+# if none is found
+# =======================================================================================
+
+def plot2dCentroids(fname):
+
+    if not fname.endswith('.raw.msgpack'):
+        fname = fname.replace('.msgpack','.raw.msgpack')
+
+    os.makedirs(os.path.join(os.path.dirname(fname), 'debug'), exist_ok=True)
+
+    # Figure out width and height of cameras
+    frame1 = None
+    for x in util.iterMocapFrames(fname):
+        frame1 = x
+        if len(frame1.centroids) > 0: break
+    w = frame1.centroids[1].width
+    h = frame1.centroids[1].height
+
+    # Gather camera 2d histogram
+    camImgs = [np.zeros((h, w)) for x in range(18)]
+    totalRecords = util.countRecords(fname)
+    iRecord = 0
+
+    for x in util.iterMocapFrames(fname):
+
+        iRecord += 1
+        if (iRecord%20000) == 0:
+            print("Plotting camera centroids ("+'{:.2f}'.format(100*iRecord/totalRecords)+" %)")
+
+        for frameID, frame in x.centroids.items():
+            for c in frame.centroids:
+                for dx in range(0,1): #range(-1, 2):
+                    for dy in range(0,1): #range(-1, 2):
+                        camImgs[frameID - 1][max(0, min(h - 1, int(c.y + dy)))]\
+                            [max(0, min(w - 1, int(c.x + dx)))] += 1
+
+    # Save images (max-proj)
+    for camID in range(18):
+        scipy.misc.imsave(os.path.join(os.path.dirname(fname),
+            'debug/MaxProjection_Camera_' + str(camID) + '.png'), camImgs[camID] >= 1)
+
+    # Save images (log)
+    for camID in range(18):
+        img = np.log(camImgs[camID] + 1)
+        img *= (255.0 / np.max(img))
+        scipy.misc.imsave(os.path.join(os.path.dirname(fname),
+            'debug/LogProjection_Camera_' + str(camID) + '.png'), img)
+
+    # Done!
+    pass
+
+def plotTriggerboxes(fname, tbs):
+
+    os.makedirs(os.path.join(os.path.dirname(fname), 'debug'), exist_ok=True)
+
+    d = []
+    for c in tbs:
+        for x in tbs[c]:
+            for y in x:
+                d.append(y)
+    d = pd.DataFrame(d, columns=['camID', 'frameID', 'x', 'y', 'type'])
+    (ggplot(d, aes(x='x', y='y')) +
+        geom_point(size=2) +
+        facet_wrap('camID')).save(
+        filename=os.path.join(os.path.dirname(fname),'debug/debug_triggerbox.png'))
+
+# =======================================================================================
+# Process file
+# =======================================================================================
+
+def processFile(fname):
+
+    if not fname.endswith('.msgpack'):
+        raise Exception("extract_mocap_trigger.processFile requires .msgpack input.")
+
+    # Switch to the .raw.msgpack file
+    if not fname.endswith('.raw.msgpack'):
+        fname = fname.replace('.msgpack', '.raw.msgpack')
+
+    # Find the camera with the sync signal
+    camsWithSync = findCameraWithSync(fname)
+
+    # Get the camera with the maximum fraction of triggerboxes found
+    camsWithSync = sorted(camsWithSync, key=lambda x:-x[1])
+
+    # No cams?
+    if len(camsWithSync) == 0:
+        print("Can't extract trigger signals, no sync signal found.")
+    else:
+        print("Found multiple sync cameras:")
+        for camWithSync in camsWithSync:
+            print("Camera "+str(camWithSync[0])+" ("+str(camWithSync[1])+").")
+
+        findTriggers(fname, camsWithSync, async=False)
+
+# =======================================================================================
+# Entry point
+# =======================================================================================
+
+def run(async=False, settings=None):
+
+    # ...
+    if settings == None:
+        settings = util.askForExtractionSettings()
+
+    # Process all log files:
+    for file in settings.files:
+        processFile(file)
+
+if __name__ == "__main__":
+
+    run(None)
+
+    # ============= DEBUG =============
+    #startFrame = None #1588914 - 10
+    #camID = 17
+    #fname = "../../data/2017-04-20 14-08-04/2017-04-20 14-08-04.raw.msgpack"
+    #async = True # False
+    #findTriggers(fname, camID, async=async, startFrame=startFrame)
+    # ============ / DEBUG ============
