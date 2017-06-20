@@ -87,6 +87,7 @@ void hardware::Init(boost::thread* pThread) {
 	pSerialTrigger = findDevice("Teensy TTL Controller"    , &portTrigger);
 	pSerialFlySim  = findDevice("FlySim Arduino Controller", &portFlySim);
 	pSerialPerch   = findDevice("Perch Controller", &portPerch);
+	delete pSerialPerch; pSerialPerch = 0;
 
 	if (!pSerialTrigger) {
 		logging::Log("[HARDWARE] Could not establish connection with Teensy TTL trigger interface.");
@@ -250,41 +251,39 @@ void hardware::RotatePerch(int perchIdx, int dir) {
 		}
 	}
 
-	if (pSerialPerch) {
-		if (!pSerialPerch->IsConnected()) {
-			delete pSerialPerch;
-			pSerialPerch = openDevice(portPerch);
-			std::cout << "Resetting perch interface...\n";
-		}
+	pSerialPerch = openDevice(portPerch);
 
-		if (pSerialPerch->IsConnected()) {
+	if (pSerialPerch->IsConnected()) {
 		
-			char buffer[4096];
-			int n = sprintf(buffer, "rotate %d %d\n", perchIdx, dir);
+		char buffer[4096];
+		int n = sprintf(buffer, "rotate %d %d\n", perchIdx, dir);
 
-			// Read buffer --- even though this data is not currently used, if we don't read it, the buffer 
-			// will fill up and stall reading!
-			const int BUF_SIZE = 1024 * 256;
-			char serialBuffer[BUF_SIZE];
-			memset(serialBuffer, 0, sizeof(char) * BUF_SIZE);
-			int numBytesRead = pSerialPerch->ReadData(serialBuffer, BUF_SIZE - 1);
+		// Read buffer --- even though this data is not currently used, if we don't read it, the buffer 
+		// will fill up and stall reading!
+		const int BUF_SIZE = 1024 * 256;
+		char serialBuffer[BUF_SIZE];
+		memset(serialBuffer, 0, sizeof(char) * BUF_SIZE);
+		int numBytesRead = pSerialPerch->ReadData(serialBuffer, BUF_SIZE - 1);
 
-			std::cout << serialBuffer << std::endl;
+		std::cout << serialBuffer << std::endl;
 
-			boost::posix_time::ptime hpct = boost::posix_time::second_clock::local_time();
+		boost::posix_time::ptime hpct = boost::posix_time::second_clock::local_time();
 
-			pSerialPerch->WriteData(buffer, n);
+		pSerialPerch->WriteData(buffer, n);
 
-			// Remember this direction of rotation, so we don't make needless Serial calls
-			g_CurrentPerchDirections[perchIdx] = dir;
+		// Remember this direction of rotation, so we don't make needless Serial calls
+		g_CurrentPerchDirections[perchIdx] = dir;
 
-			std::cout << "Hardware perch command took : " << (boost::posix_time::second_clock::local_time() - hpct).total_milliseconds() << " milliseconds (read "<< numBytesRead<<" bytes).\n";
-		}
+		std::cout << "Hardware perch command took : " << (boost::posix_time::second_clock::local_time() - hpct).total_milliseconds() << " milliseconds (read "<< numBytesRead<<" bytes).\n";
 	}
+
+	delete pSerialPerch;
+	pSerialPerch = 0;
 }
 
 void hardware::SetPerchSpeed(int minvel, int maxvel) {
 
+	pSerialPerch = openDevice(portPerch);
 	if (pSerialPerch) {
 		char buffer[4096];
 		int n = sprintf(buffer, "vel %d %d\n", minvel, maxvel);
@@ -292,4 +291,6 @@ void hardware::SetPerchSpeed(int minvel, int maxvel) {
 
 		std::cout << "Set perch speed. \n";
 	}
+	delete pSerialPerch;
+	pSerialPerch = 0;
 }
