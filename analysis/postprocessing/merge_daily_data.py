@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
 import msgpack
 import os, multiprocessing
-import datetime
+import datetime, time
 import sqlite3
 
 OVERWRITE = False
@@ -86,17 +86,30 @@ def run(settings, async=True):
             folder, '%Y-%m-%d %H-%M-%S'), '%Y-%m-%d')
         if not key in byday:
             byday[key] = []
-        byday[key].append(folder)
+
+        # Only add folders that are not actively being edited
+        #    (i.e. that have been inactive for at least 5 min)
+        secondsClosed = time.mktime(time.localtime()) - os.path.getmtime(folder)
+        if secondsClosed < 10:
+            # Don't process other folders on that day either...
+            # The data for that day will be processed in one go, once it is done
+            # If this behavior is not preferred, this line can be changed...
+            byday[key] = None
+            # Print status
+            print("Skipping folder, active within last 10 seconds: " + folder)
+        elif byday[key] is not None:
+            byday[key].append(folder)
     
     # Process each day
     if not async:
         for day in byday:
-            processFile(day, byday[day])
+            if byday[day] is not None:
+                processFile(day, byday[day])
     else:
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.starmap(processFile, [(day, byday[day]) for day in byday])
+            pool.starmap(processFile, [(day, byday[day]) for day in byday if byday[day] is not None])
     
     # Done!
             
 if __name__ == '__main__':    
-    run()
+    run(None)
