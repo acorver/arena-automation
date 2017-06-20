@@ -58,6 +58,9 @@ MAX_FLYSIM_DURATION_FRAMES = 3000
 # Number of trajectories saved
 numSavedTraj = 0
 
+# Number of workers to use when processing asynchronously
+NUM_WORKERS_ASYNC = 12
+
 # =======================================================================================
 # Determine whether a trajectory is a FlySim trajectory, then save it
 # =======================================================================================
@@ -81,15 +84,24 @@ def processTrajectory(trajectory, output, outputTracking, workerID, numTrajector
         # Find the best matching markers in each frame (currently multiple markers are added per frame 
         # based on proximity
         bestMarkers = {}
-        previframe = None
         for t in trajectory:
             iframe = t[1]
             if not iframe in bestMarkers:
-                bestMarkers[iframe] = t
-                previframe = iframe
-            else:
-                eprev = bestMarkers[iframe]
-        traj = [list(x)+[b] for x in trajectory]
+                bestMarkers[iframe] = []
+            bestMarkers[iframe].append(t)
+
+        # Currently, we just average the markers (in the future, e.g. take re-calibration into account,
+        # or compute Confidence Interval in way more sophisticated than just mean)
+        trajectoryNew = []
+        for iframe in sorted(bestMarkers.keys()):
+            meanPos = np.mean([x[2] for x in bestMarkers[iframe]], axis=0)
+            trajectoryNew.append( [
+                bestMarkers[iframe][0][0],
+                bestMarkers[iframe][0][1],
+                meanPos,
+                bestMarkers[iframe][0][3] ])
+        # Replace trajectory with corrected trajectory
+        trajectory = trajectoryNew
 
         # Can this be a flysim trajectory? Required minimum amount of displacement
         minBound, maxBound, bboxSpan = trajectoryBBox(trajectory)
@@ -187,7 +199,11 @@ def extractFlysim_Worker(tasks, output, outputTracking):
     numTrajectories = 0
     
     while not done:
-        taskList = tasks[workerIDFromProcess].get()
+        taskList = None
+        try:
+            taskList = tasks[workerIDFromProcess].get()
+        except Exception as e:
+            raise e # Allows setting debugging breakpoint
         # Are all frames read?
         if isinstance(taskList, str) and taskList == 'NO_FRAMES_LEFT':
             # Process the remaining trajectories
@@ -266,8 +282,8 @@ def processFile(fname, async=True):
     
     # Number of CPUs to use (due to IO reading limits, only ? workers appear to be necessary 
     # for maximum performance)
-    NUM_WORKERS = 10 if not DEBUG else 1
-    
+    NUM_WORKERS = NUM_WORKERS_ASYNC if not DEBUG else 1
+
     # Output file names
     foName         = fname.replace('.raw.msgpack','.msgpack').replace('.msgpack','.flysim.csv')
     foNameTracking = fname.replace('.raw.msgpack','.msgpack').replace('.msgpack','.flysim.tracking.csv')
