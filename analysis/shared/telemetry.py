@@ -1,10 +1,11 @@
 
+# --------------------------------------------------------
+# Library for telemetry reconstruction
 #
 # Author: Abel Corver
 #         abel.corver@gmail.com
-#
-#         July 2017
-#
+#         (Anthony Leonardo Lab, July. 2016)
+# --------------------------------------------------------
 
 # =================================================================================================
 # Import libraries
@@ -86,6 +87,7 @@ def reconstructEphys(fname):
     vChipFrames = []
     vBoardFrames = []
     vScanCount = []
+    vSystemClock = []
 
     # Handle exceptions (can either 'raise' the exception, interrupting the program
     # (unless the exception is handled downstream), or simply add it to the log and continue operation)
@@ -103,6 +105,7 @@ def reconstructEphys(fname):
         scanCount = getVariableFromBlock(blockID, 'spikegl_datafile_scancount')[0]
         chipFrames = getVariableFromBlock(blockID, 'chipframecounter')
         boardFrames = getVariableFromBlock(blockID, 'boardframecounter')
+        systemclock = getVariableFromBlock(blockID, 'systemclock')
 
         # Check data integrity
         if (len(boardFrames) != len(chipFrames)):
@@ -115,12 +118,15 @@ def reconstructEphys(fname):
             block = chipFrames = boardFrames = scanCount = (np.array(chipFrames) * np.nan).tolist()
         else:
             scanCount = [scanCount + (i - (len(chipFrames)-1)) * 16 for i in range(len(chipFrames))]
-            block = [block for i in range(len(chipFrames))]
+            block       = [block       for i in range(len(chipFrames))]
+            systemclock = [meta.createdon[0:meta.createdon.find(' ')] + ' ' +
+                           systemclock for i in range(len(chipFrames))]
 
         vChipFrames += chipFrames
         vBoardFrames += boardFrames
         vScanCount += scanCount
         vBlock += block
+        vSystemClock += systemclock
 
     # Correct scanCount indices:
     # This bug is introduced by the fact that the whole pre-buffer gets written at once, which
@@ -136,6 +142,7 @@ def reconstructEphys(fname):
     # create data frame
     data = pd.DataFrame(
         {'block'        : np.repeat(vBlock       , NEURAL_SAMPLES_PER_FRAME),
+         'systemClock'  : np.repeat(vSystemClock , NEURAL_SAMPLES_PER_FRAME),
          'chipFrame'    : np.repeat(vChipFrames  , NEURAL_SAMPLES_PER_FRAME),
          'boardFrame'   : np.repeat(vBoardFrames , NEURAL_SAMPLES_PER_FRAME),
          'scanIndex'    : np.repeat(vScanCount   , NEURAL_SAMPLES_PER_FRAME),
@@ -214,7 +221,7 @@ def reconstructEphys(fname):
     # Compute time leftward and rightward w.r.t. the trigger point
     x1 = computeTime(data[data.index <= trigIdx], direction = -1)
     x2 = computeTime(data[data.index >= trigIdx], direction =  1)
-    # Note that we included the trigger sample (t=0) in the leftware/backward-looking computeTime(.) call
+    # Note that we included the trigger sample (t=0) in the leftwards/backward-looking computeTime(.) call
     # as well. This was to correctly compute the time offset of the first backward sample. We now remove
     # this first sample to prevent a duplicate t=0 sample.
     data = pd.concat([x1.iloc[0:len(x1)-1], x2], axis=0)
