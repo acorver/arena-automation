@@ -82,8 +82,98 @@ def askForExtractionSettings():
     # Process newest files first
     if len(files) > 0:
         files.sort(key=lambda x: -os.path.getmtime(x))
-    
+
     return ExtractionSettings(files, False)
+
+# =======================================================================================
+# Correct frame indices
+#
+# Note: Cortex can be stopped and restarted. Each time it is restarted, the frame index resumes
+#       from 0. This causes duplicate frame issues, etc. To prevent this issue, each .msgpack
+#       file is pre-processed to ensure frameID's are unique. Because we will only ever
+#       record ~10 hours, and it is not currently conceivable we would record more than
+#       24 hours, the maximum conceivable frameID within a single consecutive block is
+#       24 * 3600 * 200 = 17,280,000 ~= 2^24 (assuming 200 fps motion capture). We therefore
+#       use the higher power of two bits to encode each "restart" of the counter. In this way
+#       the original frameID can easily be recovered from any frameID by selecting only
+#       the 24 least significant bits.
+#
+#       Correcting frame indices is a risky business when done wrong. If this function were
+#       to crash, we could lose the original datafile. Therefore, at first the corrected file
+#       is written to a new ".msgpack.tmp" file. Consequently, after this file is successfully
+#       created, the original file is either renamed to ".msgpack.old" (when debugging)
+#       otherwise or deleted.
+#
+#       This function is run as part of the "buildMocapIndex" function, as that function requires
+#       a unique frame ID for lookup purposes. When a .msgpack.index file already exists,
+#       this function will refuse to execute.
+#
+#       Note that running this function will create an incompatibility in frame indices between
+#       daily files and
+#
+# =======================================================================================
+
+def correctFrameIndices(file):
+
+    # Check if frame indices have already been corrected
+    if os.path.exists(file.replace('.msgpack','.msgpack.index')):
+        raise Exception("Index file already exists, so frame IDs have already been corrected.")
+
+    # Set output paths
+    fnameOutOriginal = file.replace('.msgpack','') + '.msgpack.original'
+    fnameOutTmp      = file.replace('.msgpack','') + '.msgpack.tmp'
+
+    # Check if the temporary output file doesn't already exist
+    # If it exists, don't run this function
+    if os.path.exists(fnameOutOriginal):
+        raise Exception(".msgpack.original file already exists...")
+
+    # Print status
+    print("Correcting frame indices...")
+
+    # This variable keeps track of the number of "restarts"
+    numRestarts = 0
+
+    # This variable keeps track of last frameID (used to detect "restarts")
+    lastFrameID = None
+
+    # Transfer data and correct frame index
+    with open(fnameOutTmp, 'wb') as fOut:
+        with open(file, 'rb') as fIn:
+            unpacker = msgpack.Unpacker(fIn)
+            for data in unpacker:
+                frameID = data[0]
+
+                # Restart?
+                if lastFrameID != None and frameID <= lastFrameID:
+                    numRestarts += 1
+                    print("Restart detected in frame index... adjusting frame "
+                          "indices (#restarts="+str(numRestarts)+".")
+                lastFrameID = frameID
+
+                data[0] = frameID + (numRestarts << 24)
+                fOut.write(msgpack.packb(data))
+
+    # Currently, we rename the current file to .original for security purposes,
+    # in case anything is wrong with the "fix index" algorithm. However,
+    # once we fully trust this function, the .msgpack.original file can be deleted,
+    # as the original frameID's can be recovered from the newly assigned frameID's
+    # We currently, however, do not back up the .raw.msgpack.original file, as this is
+    # itself a copy of existing data.
+
+    if file.endswith('.raw.msgpack'):
+        os.remove(file)
+    else:
+        os.rename(file, fnameOutOriginal)
+    # Assign the .tmp file the original input filename... The index adjustment/fix is hereby
+    # hidden from any other functions (indirectly) calling this function.
+    os.rename(fnameOutTmp, file)
+
+    # Print status
+    print("Done correcting frame indices.")
+
+    # Done!
+    pass
 
 # =======================================================================================
 # Build an index for a mocap file
@@ -97,6 +187,10 @@ def buildMocapIndex(file, verbose=False):
     elif os.path.exists(ofile):
         raise Exception("Mocap index already exists.")
     else:
+        # Correct frame indices to remove duplicates, if necessary
+        correctFrameIndices(file)
+
+        # Start creating index
         conn = sqlite3.connect(ofile)
         c = conn.cursor()
         c.execute('''CREATE TABLE idx
@@ -112,7 +206,17 @@ def buildMocapIndex(file, verbose=False):
             
             i += 1
             if (i % 100000) == 0:
-                c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
+                try:
+                    c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
+                except:
+                    # If failed, find the conflicting frameID
+                    for b in buf:
+                        try:
+                            c.execute('insert into idx (frameID, offset) values (?,?)', b)
+                        except Exception as e:
+                            print("Error inserting frame, frameID="+str(b[0])+".")
+                            print("Likely duplicate frame index.")
+                            raise e # Make sure program is interrupted...
                 conn.commit()
                 buf = []
                 if verbose:
@@ -141,6 +245,7 @@ def getAllMarkersInFrame(frame):
 #    o This file format was used for data files between ~August 2016 - present...
 #    o In the future, we may switch to another data format, in which case this function 
 #      can simply be expanded, without having to change other functions.
+#
 
 class MocapFrameIterator:
     def __init__(self, file, nearbyVertexRange=None, startFrame=None, endFrame=None, numFrames=None):

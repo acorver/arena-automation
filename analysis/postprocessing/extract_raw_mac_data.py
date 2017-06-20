@@ -16,17 +16,12 @@ if __name__ == "__main__":
 # Imports and global constants for this script
 # =======================================================================================
 
-import numpy as np
-import struct
-from shared import util
 import msgpack, json
+import datetime, time, re
 import sqlite3
-import subprocess
-import io
-import datetime, time
+import subprocess, shutil
 from multiprocessing import Pool, cpu_count
 from shared import util
-import shutil
 
 # Directory to search for Cortex data
 CORTEX_DIR = 'Z:/data/dragonfly/motion capture/MoCap raw'
@@ -41,6 +36,10 @@ DEBUG = False
 #
 CONVERTER_EXE = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),'../bin/cortex-raw-utils.exe'))
+
+#
+MAX_RAW_TIME_MISMATCH = 2 # 2 seconds max mismatch (average mismatch appears to be ~0.4 seconds,
+                          # apparently always lower than 1 second mismatch in the test data set.)
 
 # =======================================================================================
 # Convert entire cortex directory to SQLite and/or csv file
@@ -76,7 +75,7 @@ def extractVCFile(capFileIdx, capFile, outputDir):
 
     with open(timecodeFile, 'r') as f:
         tmp = f.read().split('\n')
-        date = datetime.datetime.utcfromtimestamp(os.path.getmtime(
+        date = datetime.datetime.utcfromtimestamp(os.path.getctime(
             timecodeFile)).strftime('%Y-%m-%d ')
         startTime = datetime.datetime.strptime(date + tmp[0], '%Y-%m-%d %H:%M:%S:00')
         startFrame = int(tmp[3])
@@ -85,15 +84,15 @@ def extractVCFile(capFileIdx, capFile, outputDir):
     if rawCameraDataFile == '' or not os.path.exists(rawCameraDataFile):
         return
     
-    # Try all cameras
+    # Try all cameras (this script checks for the presence of up to 64 cameras)
     sqliteCache = []
-    for camID in range(1,1024):
+    for camID in range(1,64):
         # Construct the actual filename for each camera
         vcFile = rawCameraDataFile.replace('.vc1','.vc'+str(camID))
 
-        # Stop this loop if we processed all cameras
+        # Skip over non-existent cameras
         if not os.path.isfile(vcFile):
-            break
+            continue
 
         # Use external C application to convert raw VC files to .json format
         rawCameraDataFileConverted = vcFile + '.json'
@@ -208,8 +207,7 @@ def getCalibrationFile(capFile, dataFile):
 def processFile(dataFile):
 
     # Get time the current file was modified...
-    ctime = datetime.datetime.fromtimestamp(os.path.getmtime(
-        dataFile)).strftime('%Y-%m-%d')
+    ctime = re.search('[0-9]{4}-[0-9]{2}-[0-9]{2}', dataFile).group(0)
 
     # Get the relevant cortex data directories
     cortexCapDirs = [os.path.join(CORTEX_DIR,y) for y in os.listdir(CORTEX_DIR) if \
@@ -230,31 +228,40 @@ def processFile(dataFile):
 
     # Now loop through the frames received in the file, and find their corresponding raw camera files
     counter = 0
+    dataFileOut = dataFile.replace('.msgpack','') + '.raw.msgpack'
+    dbgFileOut  = dataFile.replace('.msgpack','') + '.raw.dbg'
     with open(dataFile,'rb') as fIn:
-        with open(dataFile.replace('.msgpack','.raw.msgpack'),'wb') as fOut:
+        with open(dataFileOut,'wb') as fOut, open(dbgFileOut, 'w') as fOutDbg:
             for frame in msgpack.Unpacker(fIn):
                 # Get frame ID
                 frameID = frame[0]
+                # Recover the original Cortex frameID (first 24 bits)
+                originalFrameID = frameID & (2**24 - 1)
                 # Get time (in seconds, hence divide by 1000)
                 frameTime = frame[5] / 1000
                 # Query the raw data
                 results = [x for x in c.execute(
                     'select frameID, cameraID, timestampPOSIX, centroids, capfile from vc where '+
-                    'frameID=? ORDER BY timestampPOSIX-? DESC',
-                        [frameID, frameTime])]
+                    'frameID=? ORDER BY ABS(timestampPOSIX-?) ASC',
+                        [originalFrameID, frameTime])]
 
                 rawData = []
                 if len(results) > 0:
+                    # Print timing mismatch between raw frame found, and frame stored by ArenaAutomation
+                    fOutDbg.write( str(results[0][2] - frameTime) + '\n' )
                     # Only keep the data with the closest matching frame
                     # Note that the resultset is already ordered by the SQL query
                     nresults = {}
                     for result in results:
-                        camID = result[1]
-                        if not camID in nresults:
-                            nresults[camID] = result
-                        else:
-                            pass # Good point to put breakpoint to debug
-                                 # how frameID conflicts are resolved
+                        if abs( result[2] - frameTime ) < MAX_RAW_TIME_MISMATCH:
+                            camID = result[1]
+                            if not camID in nresults:
+                                nresults[camID] = result
+                            else:
+                                print("Possible error. Multiple frames with the same frame index "
+                                      "occurred within MAX_RAW_TIME_MISMATCH of the XYZ data frame "
+                                      "recorded by the ArenaAutomation software... FrameID="+frameID+
+                                      "frameTime="+str(frameTime)+". The closest frame was selected.")
                     # Process each result
                     for camID, result in nresults.items():
                         js = json.loads(result[3])
@@ -276,6 +283,11 @@ def processFile(dataFile):
                 if (counter%10000) == 0:
                     print("Gathered raw frame data for "+str(counter)+"/"+str(totalToProcess)+" frames ")
                 counter += 1
+
+    # Fix indices of newly created file (this is ensured by creating an index, which in turn is
+    # ensured by printing the number of items)
+    util.countRecords(dataFileOut)
+
     # Done!
     pass
 
