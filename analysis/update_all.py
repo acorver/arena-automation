@@ -8,7 +8,7 @@
 # Imports
 # =======================================================================================
 
-import os
+import os, multiprocessing
 from subprocess import call
 
 from df_reports import generate_reports
@@ -18,7 +18,7 @@ from postprocessing import extract_perching_locations
 from postprocessing import extract_perching_orientations
 from postprocessing import extract_flysim
 from postprocessing import extract_raw_mac_data
-from postprocessing import extract_mac_trigger
+from postprocessing import extract_mocap_trigger
 from postprocessing import extract_log_info
 from postprocessing import extract_headmovements
 from postprocessing import create_highspeed_links
@@ -38,56 +38,73 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)),'../data'))
 #    that facilitates easy plotting and analysis. This will also generate HTML reports.
 # =======================================================================================
 
-def updateAll(settings):
-    # Create daily files (by default, we now always compute the data over entire days, rather than segments)
-    merge_daily_data.run(settings)
-    
-    # Process data with Python scripts
-    p1 = extract_flysim.run(async = False, settings = settings)
-    print("Done processing FlySim, now extracting log info.")
-
-    extract_log_info.run(settings = settings)
-    print("Done extracting log info, now computing perch locations.")
-
-    p2 = extract_perch_locations.run(async=False, settings = settings)
-    
-    # Make sure the previous processes have finished before starting the next ones
-    #p1.join()
-    #p2.join()
-    
-    print("Done extracting perch locations, now computing takeoffs / perching locations.")
-    
-    # After FlySim trajectories have been extracted, we can process perching locations
-    p3 = extract_perching_locations.run(async=False, settings = settings)
-    
-    print("Done computing takeoffs, now extracting raw camera data.")
-    #p4 = extract_raw_mac_data.run(async = False, settings = settings)
+def updateAll_p1(settings):
+    print("Extracting raw camera data.")
+    p4 = extract_raw_mac_data.run(async=False, settings=settings)
 
     print("Done extracting raw camera data, now extracting alignment triggers.")
-    #extract_mac_trigger.run(settings = settings)
-    
-    #extract_perching_orientations.run(async=True)
-    #extract_headmovements.run()
-    
+    extract_mocap_trigger.run(settings=settings)
+
+    print("Extracting telemetry")
+    pass
+
+def updateAll_p2(settings):
+    # Process data with Python scripts
+    p1 = extract_flysim.run(async=False, settings=settings)
+    print("Done processing FlySim, now extracting log info.")
+
+    extract_log_info.run(settings=settings)
+    print("Done extracting log info, now computing perch locations.")
+
+    p2 = extract_perch_locations.run(async=False, settings=settings)
+
     # Make sure the previous processes have finished before starting the next ones
-    #p3.join()
-    
+    # p1.join()
+    # p2.join()
+
+    print("Done extracting perch locations, now computing takeoffs / perching locations.")
+
+    # After FlySim trajectories have been extracted, we can process perching locations
+    p3 = extract_perching_locations.run(async=False, settings=settings)
+
+    # extract_perching_orientations.run(async=True)
+    # extract_headmovements.run()
+
+    # Make sure the previous processes have finished before starting the next ones
+    # p3.join()
+
     print("Done processing data, now plotting takeoffs.")
-    
-    p5 = plot_takeoffs.run(async=False, settings = settings)
-    create_highspeed_links.run(async=False, settings = settings)
-    
+
+    p5 = plot_takeoffs.run(async=False, settings=settings)
+    create_highspeed_links.run(async=False, settings=settings)
+
     # Make sure the previous processes have finished before generating the final report
-    #p5.join()
-    
+    # p5.join()
+
     print("Done plotting takeoffs, now generating reports.")
 
     # Generate the final report
-    generate_reports.run(settings = settings)
-    
+    generate_reports.run(settings=settings)
+
     # Print done
     print("All data analysis is up to date.")
-    
+
+
+def updateAll(settings):
+    # Create daily files (by default, we now always compute the data over entire days, rather than segments)
+    merge_daily_data.run(settings)
+
+    # Run other scripts (in parallel where possible, hence part 1 (p1) and part 2 (p2)
+    p1 = multiprocessing.Process(target=updateAll_p1, args=(settings,))
+    p1.start()
+
+    p2 = multiprocessing.Process(target=updateAll_p2, args=(settings,))
+    p2.start()
+
+    # Wait for subprocesses to finish
+    p1.join()
+    p2.join()
+
 # =======================================================================================
 # Main entry point: Allows this script to be run directly by user, who will be queried for input
 # =======================================================================================
