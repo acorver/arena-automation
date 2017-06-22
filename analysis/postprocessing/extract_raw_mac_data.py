@@ -38,8 +38,8 @@ CONVERTER_EXE = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)),'../bin/cortex-raw-utils.exe'))
 
 #
-MAX_RAW_TIME_MISMATCH = 2 # 2 seconds max mismatch (average mismatch appears to be ~0.4 seconds,
-                          # apparently always lower than 1 second mismatch in the test data set.)
+MAX_RAW_TIME_MISMATCH = 10 # 10 seconds max mismatch (average mismatch appears to be ~0.4 seconds,
+                           # although in the evening (or other times?) there is sometimes a ~4 second mismatch...
 
 # =======================================================================================
 # Convert entire cortex directory to SQLite and/or csv file
@@ -75,7 +75,7 @@ def extractVCFile(capFileIdx, capFile, outputDir):
 
     with open(timecodeFile, 'r') as f:
         tmp = f.read().split('\n')
-        date = datetime.datetime.utcfromtimestamp(os.path.getctime(
+        date = datetime.datetime.fromtimestamp(os.path.getctime(
             timecodeFile)).strftime('%Y-%m-%d ')
         startTime = datetime.datetime.strptime(date + tmp[0], '%Y-%m-%d %H:%M:%S:00')
         startFrame = int(tmp[3])
