@@ -17,7 +17,7 @@ if __name__ == "__main__":
 # =======================================================================================
 
 import msgpack
-import os, multiprocessing
+import os, multiprocessing, shutil
 import datetime, time
 import sqlite3
 
@@ -31,35 +31,47 @@ def processFile(folderPrefix, dayParts):
     
     # Create the output folder
     os.makedirs(folderPrefix, exist_ok=True)
-    
-    # Join log file
-    fnameOut = folderPrefix+'/'+folderPrefix+'.log'
-    if not os.path.exists(fnameOut) or OVERWRITE:
-        connOut = sqlite3.connect(fnameOut)
-        cOut = connOut.cursor()
-        cOut.execute('create table if not exists PLOG (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME, msg TEXT)')
-        for part in dayParts:
-            fnameIn = part+'/'+part+'.log'
-            if os.path.exists(fnameIn):
-                conn = sqlite3.connect(fnameIn)
-                c = conn.cursor()
-                for row in c.execute('select timestamp,msg from PLOG'):
-                    cOut.execute('insert into PLOG (timestamp,msg) values (?,?)', (row[0], row[1]))
-                connOut.commit()
-                conn.close()
-        connOut.close()
 
-    # Consolidate the MSGPACK files
-    fnameOut = folderPrefix+'/'+folderPrefix+'.msgpack'
-    if not os.path.exists(fnameOut) or OVERWRITE:
-        with open(fnameOut,'wb') as fOut:
+    fnameOutLog = folderPrefix + '/' + folderPrefix + '.log'
+    fnameOut    = folderPrefix + '/' + folderPrefix + '.msgpack'
+
+    # If there is only one recording during this day, simply copy the data files to the new directory
+    if len(dayParts) == 1:
+
+        print("Merging daily files (single part, so simple copy): "+folderPrefix)
+
+        part = dayParts[0]
+        shutil.copyfile(part+'/'+part+'.msgpack', fnameOut)
+        shutil.copyfile(part+'/'+part+'.log'    , fnameOutLog)
+    else:
+        print("Merging daily files: "+folderPrefix)
+
+        # Join log file
+        if not os.path.exists(fnameOutLog) or OVERWRITE:
+            connOut = sqlite3.connect(fnameOutLog)
+            cOut = connOut.cursor()
+            cOut.execute('create table if not exists PLOG (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME, msg TEXT)')
             for part in dayParts:
-                fnameIn = part+'/'+part+'.msgpack'
+                fnameIn = part+'/'+part+'.log'
                 if os.path.exists(fnameIn):
-                    with open(fnameIn,'rb') as fIn:
-                        unpacker = msgpack.Unpacker(fIn)
-                        for data in unpacker:
-                            fOut.write(msgpack.packb(data))
+                    conn = sqlite3.connect(fnameIn)
+                    c = conn.cursor()
+                    for row in c.execute('select timestamp,msg from PLOG'):
+                        cOut.execute('insert into PLOG (timestamp,msg) values (?,?)', (row[0], row[1]))
+                    connOut.commit()
+                    conn.close()
+            connOut.close()
+
+        # Consolidate the MSGPACK files
+        if not os.path.exists(fnameOut) or OVERWRITE:
+            with open(fnameOut,'wb') as fOut:
+                for part in dayParts:
+                    fnameIn = part+'/'+part+'.msgpack'
+                    if os.path.exists(fnameIn):
+                        with open(fnameIn,'rb') as fIn:
+                            unpacker = msgpack.Unpacker(fIn)
+                            for data in unpacker:
+                                fOut.write(msgpack.packb(data))
 
 # =======================================================================================
 # 
