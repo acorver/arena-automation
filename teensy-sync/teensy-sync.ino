@@ -9,16 +9,16 @@ const int PIN_LEDS[] = {1, 3, 5, 7};
 #define BLINK_MICROSECONDS 5000 // Assumes 200 FPS camera rate
 #define BLINK_NUM_FRAMES 5
 
-// Indicator for how many frames the LED's were just on
-int g_nNumFramesOn;
+// Switch to allow LED's to be continually on, to test Mocap thresholds
+bool g_DebugState; 
 
 void setup() {
 
   // Init serial communication
-  // Serial.begin(9600);
-
+  Serial.begin(9600);
+  
   // Init variables
-  g_nNumFramesOn = 0;
+  g_DebugState = false;
 
   // Init pins
   for (int i = 0; i < NUM_LEDS; i++) {
@@ -27,6 +27,9 @@ void setup() {
   pinMode(PIN_TRIGGER_IN, INPUT);
   pinMode(PIN_SIGNAL_OUT, OUTPUT);
   
+  // Attach interrupt for signal
+  attachInterrupt(PIN_TRIGGER_IN, onTrigger, RISING);
+  
   // Init signals
   for (int i = 0; i < NUM_LEDS; i++) {
     digitalWrite(PIN_LEDS[i], LOW);
@@ -34,23 +37,58 @@ void setup() {
   digitalWrite(PIN_SIGNAL_OUT, LOW);
 }
 
-void loop() {
-
+void onTrigger() {
+  
   // Turn on LED's for just 5 frames
-  if (digitalRead(PIN_TRIGGER_IN) == HIGH && g_nNumFramesOn == 0) {
+  if (digitalRead(PIN_TRIGGER_IN) == HIGH) {
+    
     // Turn all LED's on
     for (int i = 0; i < NUM_LEDS; i++) {
       digitalWrite(PIN_LEDS[i], HIGH );
     }
+
+    // Wait 5 frames
     delayMicroseconds(BLINK_MICROSECONDS * BLINK_NUM_FRAMES); 
-    for (int i = 0; i < NUM_LEDS; i++) {
-      digitalWrite(PIN_LEDS[i], LOW );
-    }
-    g_nNumFramesOn ++;
+  } 
+
+  // Turn all LED's off
+  for (int i = 0; i < NUM_LEDS; i++) {
+    digitalWrite(PIN_LEDS[i], LOW );
   }
 
-  if (digitalRead(PIN_TRIGGER_IN) == LOW) {
-    g_nNumFramesOn = 0;
+  // Automatically turn debug mode off
+  g_DebugState = false;
+
+  // Status output
+  Serial.println("Triggered!");
+}
+
+void loop() {
+
+  // Read serial
+  if (Serial.available()) {
+    
+    char c = Serial.read();
+    
+    if (c == '+' || c == '-') {
+        
+      g_DebugState = (c=='+');
+  
+      Serial.println(g_DebugState?"Debug state":"Non-debug state");
+    }
+  }
+
+  if (g_DebugState) {
+    // flash the LED's !
+    if ( (micros()%1000000) < 10000 ) {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        digitalWrite(PIN_LEDS[i], HIGH);
+      } 
+    } else {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        digitalWrite(PIN_LEDS[i], LOW);
+      }
+    }
   }
 } 
 
