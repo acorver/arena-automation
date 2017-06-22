@@ -23,10 +23,12 @@ import multiprocessing
 from time import sleep
 import pandas as pd, numpy as np
 from ggplot import *
+import matplotlib.pyplot as plt
 import scipy.misc
 from shared import util
 import re, datetime
 import traceback
+import seaborn as sns
 
 # =======================================================================================
 # Find number of available cameras
@@ -97,23 +99,31 @@ def findTriggerBoxInFrame(frame, camID, spacing=None, debug=True):
                 # Now check if triggers occurred
                 additionalPts = []
                 for i,c in zip(range(len(centroids)),centroids):
+                    syncboxPts = None
                     try:
                         syncboxPts = [syncbox[m] for m in ['c1','c2','c3']]
                     except Exception as e:
                         traceback.print_exc()
                     mindist = np.min([np.linalg.norm(c-c2) for c2 in syncboxPts+additionalPts])
                     if mindist > 5:
-                        fcol = np.cross(
-                            (syncboxPts[0] - syncboxPts[2])/np.linalg.norm(syncboxPts[0] - syncboxPts[2]),
-                            (c - syncboxPts[2])/np.linalg.norm(c - syncboxPts[2]))
-                        isColinear = abs(fcol) < 0.05
-                        isNearby = mindist < 0.7 * spacing
+                        colinearity = []
+                        for sbp in [(syncboxPts[0],syncboxPts[1]),(syncboxPts[0],syncboxPts[2]),(syncboxPts[1],syncboxPts[2])]:
+                            v1 = sbp[0] - c
+                            v2 = c - sbp[1]
+                            v3 = sbp[0] - sbp[1]
+                            colinearity.append(np.abs(np.dot(v1, v2) * np.dot(v2, v3) * np.dot(v1, v3) /
+                                (np.linalg.norm(v1) * np.linalg.norm(v2) *
+                                 np.linalg.norm(v2) * np.linalg.norm(v3) *
+                                 np.linalg.norm(v1) * np.linalg.norm(v3))))
 
-                        syncbox['colinearity'] = [(mindist, fcol), ] + (
-                            [] if not 'colinearity' in syncbox else syncbox['colinearity'])
+                        isColinear = min(colinearity) > 0.95
+                        isNearby = mindist < 0.7 * spacing
 
                         if isNearby and isColinear:
                             additionalPts.append(c)
+                            syncbox['colinearity'] = [(mindist, colinearity), ] + (
+                                [] if not 'colinearity' in syncbox else syncbox['colinearity'])
+
                 syncbox['additionalPts'] = additionalPts
             else:
                 syncbox = None
@@ -225,6 +235,13 @@ def findTriggers_Worker(tasks, output, async=True):
 
 def findTriggers(fname, camIDs, async=True, startFrame=None):
 
+    fnameLedTriggers = fname.replace('.raw.msgpack','').replace('.msgpack','')+'.led_triggers_tmp'
+
+    # Don't process if file already exists
+    if os.path.exists(fnameLedTriggers):
+        print("Skipping trigger search, file already exists: " + fnameLedTriggers)
+        return
+
     # Number of CPUs to use (due to IO reading limits, only 8 workers appear to be necessary 
     # for maximum performance)
     NUM_CPUS = 8
@@ -245,7 +262,7 @@ def findTriggers(fname, camIDs, async=True, startFrame=None):
     
     # Start queueing frames
     numFramesProcessed = 0
-    with open(fname.replace('.raw.msgpack','').replace('.msgpack','')+'.led_triggers','w') as fOut:
+    with open(fnameLedTriggers,'w') as fOut:
         fOut.write('camID,frame,timestamp,timestamp_str\n')
         while True:
             try:
@@ -411,6 +428,102 @@ def plotTriggerboxes(fname, tbs):
     pass
 
 # =======================================================================================
+# Extract finalized trigger signals
+# =======================================================================================
+
+def finalizeTriggers(fname):
+    # Create filename to read
+    fnameLedTriggers = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.led_triggers_tmp'
+
+    fnameLedTriggersFinal = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.led_triggers'
+
+    # Read the trigger file
+    triggers = pd.read_csv(fnameLedTriggers, skiprows=1, header=None,
+                 names=['type','camID','frameID','timestamp','timestamp_str'])
+
+    # Look for continuous blocks of 5 frames with trigger
+    # TODO: Do quality check by checking how many cameras actually support that trigger being there,
+    #       and how reliable those cameras have been
+    # TODO: Check for overlapping trigger ranges across different cameras... that is likely error...
+
+    actualTriggers = {}
+    for camID in triggers.camID.unique():
+        # Get frames seen as triggers by this camera
+        frames = triggers[triggers.camID==camID].frameID.tolist()
+        # Find continuous ranges
+        # Code source: https://stackoverflow.com/questions/7352684/how-to-find-the-groups-of-consecutive-elements-from-an-array-in-numpy, user answer: unutbu
+        ranges = [(x[0], x[-1]) for x in np.split(frames, np.where(np.diff(frames) != 1)[0] + 1)]
+        # Find ranges that are 5 frames long
+        for r in [r for r in ranges if (1+r[1]-r[0]) == 5]:
+            if r[0] in actualTriggers:
+                actualTriggers[r[0]][0].append(camID)
+            else:
+                actualTriggers[r[0]] = [[camID], r[0], r[1]]
+
+    # Now output a new file with following data: triggerFrame, camIDs (i.e. list), timestamp, timestamp_str
+    with open(fnameLedTriggersFinal, 'w') as fOut:
+        fOut.write('camIDs,frameID,timestamp,timestamp_str\n')
+        for _, actualTrigger in actualTriggers.items():
+
+            camIDs  = actualTrigger[0]
+            frameID = actualTrigger[1]
+
+            timestamp, timestamp_str = None, None
+            for camID in camIDs:
+                s = (triggers.camID == camID) & (triggers.frameID == frameID)
+                if np.any(s):
+                    timestamp     = triggers[s].timestamp.tolist()[0]
+                    timestamp_str = triggers[s].timestamp_str.tolist()[0]
+                    break
+
+            fOut.write(','.join([' '.join([str(y) for y in camIDs]), str(frameID),
+                                 str(timestamp), timestamp_str])+'\n')
+
+# =======================================================================================
+# Plot trigger signals, for debugging
+# =======================================================================================
+
+def plotTriggerSignals(fname):
+
+    # Read triggers
+    fnameLedTriggersFinal = fname.replace('.raw.msgpack', '').\
+                                replace('.msgpack', '') + '.led_triggers'
+    triggers = pd.read_csv(fnameLedTriggersFinal)
+
+    # Ensure that the output directory exists
+    os.makedirs(os.path.join(os.path.dirname(fname), 'debug/triggers'), exist_ok=True)
+
+    # Process each trigger
+    for _, trigger in triggers.iterrows():
+
+        # Output image name
+        fnameOut = os.path.join(os.path.dirname(fname), 'debug/triggers/') + \
+                   'trigger_' + str(trigger.frameID) + '.png'
+
+        # (Re-)Extract triggerbox signal
+        td = []
+        for camID in [int(x) for x in trigger.camIDs.split(' ')]:
+            tbs = [(f.frameID, findTriggerBoxInFrame(f, camID, spacing=35)[0]) for f in
+                   util.iterMocapFrames(fname, startFrame=trigger.frameID - 10, numFrames=20)]
+            for i, tb in tbs:
+                if tb is None: continue
+                for x in ['c1', 'c2', 'c3']:
+                    td.append([camID, i, 'syncbox'] + tb[x].tolist())
+                for c in tb['additionalPts']:
+                    td.append([camID, i, 'additionalpt'] + c.tolist())
+
+        td = pd.DataFrame(td, columns=['camID', 'frame', 'type', 'x', 'y'])
+
+        # Plot
+        p = sns.FacetGrid(td, col='frame', row='camID',
+                          sharex=False, sharey=False)
+        p.map(plt.scatter, 'x', 'y')
+        p.savefig(fnameOut)
+
+    # Done!
+    pass
+
+# =======================================================================================
 # Process file
 # =======================================================================================
 
@@ -423,22 +536,37 @@ def processFile(fname):
     if not fname.endswith('.raw.msgpack'):
         fname = fname.replace('.msgpack', '.raw.msgpack')
 
-    # Find the camera with the sync signal
-    camsWithSync = findCameraWithSync(fname) # [(10,1),]
-
-    # Get the camera with the maximum fraction of triggerboxes found
-    camsWithSync = sorted(camsWithSync, key=lambda x:-x[1])
-
-    # No cams?
-    if len(camsWithSync) == 0:
-        print("Can't extract trigger signals, no sync signal found.")
+    # Don't process if file already exists
+    fnameLedTriggers = fname.replace('.raw.msgpack','').replace('.msgpack','')+'.led_triggers_tmp'
+    if os.path.exists(fnameLedTriggers):
+        print("Skipping trigger search, file already exists: " + fnameLedTriggers)
     else:
-        print("Found multiple sync cameras:")
-        for camWithSync in camsWithSync:
-            print("Camera "+str(camWithSync[0])+" ("+str(camWithSync[1])+").")
+        # Find the camera with the sync signal
+        camsWithSync = findCameraWithSync(fname) # [(10,1),]
 
-        findTriggers(fname, [x[0] for x in camsWithSync], async=False,
-                     startFrame=(DEBUG_STARTFRAME if DEBUG else None))
+        # Get the camera with the maximum fraction of triggerboxes found
+        camsWithSync = sorted(camsWithSync, key=lambda x:-x[1])
+
+        # No cams?
+        if len(camsWithSync) == 0:
+            print("Can't extract trigger signals, no sync signal found.")
+        else:
+            print("Found multiple sync cameras:")
+            for camWithSync in camsWithSync:
+                print("Camera "+str(camWithSync[0])+" ("+str(camWithSync[1])+").")
+
+            # Search for triggers
+            findTriggers(fname, [x[0] for x in camsWithSync], async=False,
+                         startFrame=(DEBUG_STARTFRAME if DEBUG else None))
+
+    # Finalize trigger signals
+    finalizeTriggers(fname)
+
+    # Having found the triggers, now plot them for manual inspection
+    plotTriggerSignals(fname)
+
+    # Done!
+    pass
 
 # =======================================================================================
 # Entry point
@@ -454,9 +582,36 @@ def run(async=False, settings=None):
     for file in settings.files:
         processFile(file)
 
+def debug():
+
+    fname = 'Z:/people/Abel/arena-automation/data/2017-06-21/2017-06-21.raw.msgpack'
+    td = []
+    for camID in [8, 11]:
+        startFrame = 1954655
+        tbs = [(f.frameID, findTriggerBoxInFrame(f, camID, spacing=35)[0]) for f in
+               util.iterMocapFrames(fname, startFrame=startFrame - 10, numFrames=20)]
+        for i, tb in tbs:
+            if tb is None: continue
+            for x in ['c1', 'c2', 'c3']:
+                td.append([camID, i, 'syncbox'] + tb[x].tolist())
+            for c in tb['additionalPts']:
+                td.append([camID, i, 'additionalpt'] + c.tolist())
+
+    td = pd.DataFrame(td, columns=['camID', 'frame', 'type', 'x', 'y'])
+    td.head()
+
+    p = ggplot(td, aes(x='x', y='y', colour='type')) + \
+        scale_color_brewer(type='qual', palette=2) + \
+        geom_point() + facet_grid("frame", "camID", scales="free")
+    t = theme_gray()
+    t._rcParams['figure.figsize'] = (4 * 4, 20 * 2.2)
+    p + t
+
 if __name__ == "__main__":
 
-    run(None)
+    #run(None)
+
+    debug()
 
     # ============= DEBUG =============
     #startFrame = None #1588914 - 10
