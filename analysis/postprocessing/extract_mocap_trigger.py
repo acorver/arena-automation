@@ -582,41 +582,5 @@ def run(async=False, settings=None):
     for file in settings.files:
         processFile(file)
 
-def debug():
-
-    fname = 'Z:/people/Abel/arena-automation/data/2017-06-21/2017-06-21.raw.msgpack'
-    td = []
-    for camID in [8, 11]:
-        startFrame = 1954655
-        tbs = [(f.frameID, findTriggerBoxInFrame(f, camID, spacing=35)[0]) for f in
-               util.iterMocapFrames(fname, startFrame=startFrame - 10, numFrames=20)]
-        for i, tb in tbs:
-            if tb is None: continue
-            for x in ['c1', 'c2', 'c3']:
-                td.append([camID, i, 'syncbox'] + tb[x].tolist())
-            for c in tb['additionalPts']:
-                td.append([camID, i, 'additionalpt'] + c.tolist())
-
-    td = pd.DataFrame(td, columns=['camID', 'frame', 'type', 'x', 'y'])
-    td.head()
-
-    p = ggplot(td, aes(x='x', y='y', colour='type')) + \
-        scale_color_brewer(type='qual', palette=2) + \
-        geom_point() + facet_grid("frame", "camID", scales="free")
-    t = theme_gray()
-    t._rcParams['figure.figsize'] = (4 * 4, 20 * 2.2)
-    p + t
-
 if __name__ == "__main__":
-
-    #run(None)
-
-    debug()
-
-    # ============= DEBUG =============
-    #startFrame = None #1588914 - 10
-    #camID = 17
-    #fname = "../../data/2017-04-20 14-08-04/2017-04-20 14-08-04.raw.msgpack"
-    #async = True # False
-    #findTriggers(fname, camID, async=async, startFrame=startFrame)
-    # ============ / DEBUG ============
+    run(None)
