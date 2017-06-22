@@ -238,6 +238,27 @@ def getAllMarkersInFrame(frame):
     return m
 
 # =======================================================================================
+# Iterate over available frameIDs
+# =======================================================================================
+
+def iterMocapFrameIDs(fname):
+
+    # Get the index file, and ensure it exists
+    fileIdx = fname.replace('.msgpack', '.msgpack.index')
+    if not os.path.exists(fileIdx):
+        # Auto-build necessary index if it doesn't exist
+        buildMocapIndex(fname)
+
+    # Connect to the index file, and loop over its indices
+    conn = sqlite3.connect(fileIdx)
+    c = conn.cursor()
+    i = 0
+    for x in c.execute('select frameID from idx',()):
+        yield i, x[0]
+        i += 1
+    conn.close()
+
+# =======================================================================================
 # Iterator for Yframes and return the parsed structure... 
 # =======================================================================================
 
