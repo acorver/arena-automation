@@ -1,0 +1,30 @@
+
+# Arena Automation
+This guide summarizes how to use the suite of
+hardware and software tools that collectively
+facilitate the automatic, unsupervised recording
+and analysis of dragonfly activity during whole-day
+recording sessions --- henceforth referred to as the
+*Arena Automation System*.
+
+## Authors:
+* Abel Corver, abel.corver@gmail.com
+(Last contribution: June 2017)
+
+## Table of Contents
+* High-level overview
+* Hardware subsystems:
+  * Trigger Signal Generator
+  * LED Trigger Signal
+  * FlySim system
+* Software processing:
+  * Overview of the processing pipeline
+  * FlySim extraction
+  * Takeoff trajectory extraction
+  * Telemetry extraction
+
+## Software processing
+This section details the various scripts that
+extract content from
+
+### Overview of the processing pipeline
