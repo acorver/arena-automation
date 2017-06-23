@@ -458,15 +458,23 @@ def finalizeTriggers(fname):
             if r[0] in actualTriggers:
                 actualTriggers[r[0]][0].append(camID)
             else:
-                actualTriggers[r[0]] = [[camID], r[0], r[1]]
+                # Get whether trigger is valid
+                #    - e.g. trigger that overlaps, and starts later than, another trigger is not valid
+                #      (however, this shouldn't happen, so report a warning)
+                isValid = (len([z for z in actualTriggers.keys() if z < r[0] and z > (r[0] - 5)]) == 0)
+                if not isValid:
+                    print("WARNING: Overlapping triggers detected!")
+                # Save!
+                actualTriggers[r[0]] = [[camID], r[0], r[1], isValid]
 
     # Now output a new file with following data: triggerFrame, camIDs (i.e. list), timestamp, timestamp_str
     with open(fnameLedTriggersFinal, 'w') as fOut:
-        fOut.write('camIDs,frameID,timestamp,timestamp_str\n')
+        fOut.write('camIDs,frameID,isvalid,timestamp,timestamp_str\n')
         for _, actualTrigger in actualTriggers.items():
 
             camIDs  = actualTrigger[0]
             frameID = actualTrigger[1]
+            isValid = actualTrigger[3]
 
             timestamp, timestamp_str = None, None
             for camID in camIDs:
@@ -476,7 +484,7 @@ def finalizeTriggers(fname):
                     timestamp_str = triggers[s].timestamp_str.tolist()[0]
                     break
 
-            fOut.write(','.join([' '.join([str(y) for y in camIDs]), str(frameID),
+            fOut.write(','.join([' '.join([str(y) for y in camIDs]), str(frameID), str(isValid),
                                  str(timestamp), timestamp_str])+'\n')
 
 # =======================================================================================
