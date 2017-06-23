@@ -20,41 +20,45 @@ from configparser import ConfigParser
 
 def loadMeta(fname):
     meta = {}
-    
-    class obj(object):
-        def __init__(self, d):
-            for a, b in d.items():
-                if isinstance(b, (list, tuple)):
-                   setattr(self, a, [obj(x) if isinstance(x, dict) else x for x in b])
-                else:
-                   setattr(self, a, obj(b) if isinstance(b, dict) else b)
 
-    with open(fname, 'r') as f:
-        config_string = '[dummy_section]\n' + f.read()
-        parser = ConfigParser()
-        parser.read_string(config_string)
-        metaTmp = dict(parser._sections['dummy_section'])
-
-        for key, value in metaTmp.items():
-            try:
-                meta[key] = int(value)
-            except:
-                try:
-                    meta[key] = float(value)
-                except:
-                    if value.lower() in ['true','false']:
-                        meta[key] = True if value.lower()=='true' else False
-                    elif ',' in value:
-                        meta[key] = value.split(',')
+    try:
+        class obj(object):
+            def __init__(self, d):
+                for a, b in d.items():
+                    if isinstance(b, (list, tuple)):
+                       setattr(self, a, [obj(x) if isinstance(x, dict) else x for x in b])
                     else:
-                        meta[key] = value
+                       setattr(self, a, obj(b) if isinstance(b, dict) else b)
 
-        # Objects are easier to address (i.e. a dot (.) instead of braces (["..."]))
-        meta = obj(meta)
+        with open(fname, 'r') as f:
+            config_string = '[dummy_section]\n' + f.read()
+            parser = ConfigParser()
+            parser.read_string(config_string)
+            metaTmp = dict(parser._sections['dummy_section'])
 
-    # Do some special processing on customRanges information
-    for i in range(len(meta.customranges)):
-        meta.customranges[i] = [float(x) for x in meta.customranges[i].split(':')]
+            for key, value in metaTmp.items():
+                try:
+                    meta[key] = int(value)
+                except:
+                    try:
+                        meta[key] = float(value)
+                    except:
+                        if value.lower() in ['true','false']:
+                            meta[key] = True if value.lower()=='true' else False
+                        elif ',' in value:
+                            meta[key] = value.split(',')
+                        else:
+                            meta[key] = value
+
+            # Objects are easier to address (i.e. a dot (.) instead of braces (["..."]))
+            meta = obj(meta)
+
+        # Do some special processing on customRanges information
+        for i in range(len(meta.customranges)):
+            meta.customranges[i] = [float(x) for x in meta.customranges[i].split(':')]
+    except Exception as e:
+        print(e)
+        return None
 
     return meta
 
@@ -71,7 +75,13 @@ def loadEphys(meta):
 # Reconstruct ephys
 # =================================================================================================
 
-def reconstructEphys(fname):
+def reconstructEphys(fname, saveToFile=False, ignoreSavedFile=False):
+
+    # Did we already process this file and save the results to disk?
+    fnameOutCsv = fname.replace('.meta', '') + '.csv'
+    if os.path.exists(fnameOutCsv) and not ignoreSavedFile:
+        # Don't re-process data, just return the already computed table
+        return pd.read_csv(fnameOutCsv)
 
     # Read .meta file
     meta = loadMeta(fname)
@@ -228,6 +238,10 @@ def reconstructEphys(fname):
 
     # Set sampleIndex as Pandas DataFrame index
     data.set_index('sampleIndex', inplace=True)
+
+    # Save to file?
+    if saveToFile:
+        data.to_csv(fnameOutCsv)
 
     # Done!
     return data
