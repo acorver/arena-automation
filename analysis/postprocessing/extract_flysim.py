@@ -187,11 +187,11 @@ def processTrajectory(trajectory, output, outputTracking, workerID, numTrajector
 # =======================================================================================
 
 # Worker function
-def extractFlysim_Worker(tasks, output, outputTracking):
-        
-    # TODO: Check if this workerID matches the workerID sent by main process! (-1 because process ID's are 1-indexed)
-    workerIDFromProcess = (multiprocessing.process.current_process()._identity[0]-1) if not DEBUG else 0
-    
+def extractFlysim_Worker(workerIDs, tasks, output, outputTracking):
+
+    # Get a unique worker ID
+    workerID = workerIDs.get()
+
     # Working variables
     openTrajectories = []
     trajectoryID = 0 
@@ -199,18 +199,14 @@ def extractFlysim_Worker(tasks, output, outputTracking):
     numTrajectories = 0
     
     while not done:
-        taskList = None
-        try:
-            taskList = tasks[workerIDFromProcess].get()
-        except Exception as e:
-            raise e # Allows setting debugging breakpoint
+        taskList = tasks[workerID].get()
         # Are all frames read?
         if isinstance(taskList, str) and taskList == 'NO_FRAMES_LEFT':
             # Process the remaining trajectories
             for t in openTrajectories:
                 numTrajectories = processTrajectory(t, output, outputTracking, workerID, numTrajectories)
             # Signal that we're done!!
-            output.put('DONE:'+str(workerIDFromProcess))
+            output.put('DONE:'+str(workerID))
             done = True
         else:
             # Loop through each frame
@@ -229,7 +225,7 @@ def extractFlysim_Worker(tasks, output, outputTracking):
                         (frame.frameID - openTrajectories[i][-1][1]) > TRAJ_TIMEOUT:
                         if len( openTrajectories[i] ) <= MAX_FLYSIM_DURATION_FRAMES:
                             numTrajectories = processTrajectory(openTrajectories[i], \
-                                output, outputTracking, workerIDFromProcess, numTrajectories)    
+                                output, outputTracking, workerID, numTrajectories)
                         del openTrajectories[i]
                         i = 0
                     else:
@@ -237,7 +233,7 @@ def extractFlysim_Worker(tasks, output, outputTracking):
                 
                 # Are we done with processing?
                 if len(openTrajectories) == 0 and frame.frameID > maxNewTrajFrame:
-                    output.put('DONE:'+str(workerIDFromProcess))
+                    output.put('DONE:'+str(workerID))
                     done = True
             
                 # Loop through unIDed points
@@ -262,7 +258,7 @@ def extractFlysim_Worker(tasks, output, outputTracking):
                             minBound, maxBound, bboxSpan = trajectoryBBox(openTrajectories[t][(-600):(-1)])
                             if bboxSpan < 10:
                                 numTrajectories = processTrajectory(openTrajectories[t], output, \
-                                    outputTracking, workerIDFromProcess, numTrajectories)
+                                    outputTracking, workerID, numTrajectories)
                                 del openTrajectories[t]
                     else:
                         # Create new trajectory (only if allowed)
@@ -270,7 +266,7 @@ def extractFlysim_Worker(tasks, output, outputTracking):
                             trajectoryID += 1
                             openTrajectories.append([(trajectoryID, frame.frameID, pos, yframes),])
             # Signal that this worker finished processing this chunk of frames
-            tasks[workerIDFromProcess].task_done()
+            tasks[workerID].task_done()
 
 #
 # Note: To parallelize the discovery of FlySim trajectories, the processFile(...) function 
@@ -297,6 +293,12 @@ def processFile(fname, async=True):
     
     # An output queue for .flysim.csv data
     output = multiprocessing.Queue()
+
+    # A queue of IDs... each worker will request a unique ID from this at startup, and use this
+    # to select the appropriate tasks
+    workerIDs = multiprocessing.JoinableQueue()
+    for id in range(NUM_WORKERS):
+        workerIDs.put(id)
     
     # An output queue for .flysim.tracking.csv data
     outputTracking = multiprocessing.Queue()
@@ -305,9 +307,9 @@ def processFile(fname, async=True):
     pool = None
     if async:
         if DEBUG:
-            pool = multiprocessing.pool.ThreadPool(NUM_WORKERS, extractFlysim_Worker, (tasks, output, outputTracking))
+            pool = multiprocessing.pool.ThreadPool(NUM_WORKERS, extractFlysim_Worker, (workerIDs, tasks, output, outputTracking))
         else:
-            pool = multiprocessing.Pool(NUM_WORKERS, extractFlysim_Worker, (tasks, output, outputTracking))
+            pool = multiprocessing.Pool(NUM_WORKERS, extractFlysim_Worker, (workerIDs, tasks, output, outputTracking))
     
     # Current reading positions in file for each of the worker processes
     currentStartFramesOfTasks = [int(minFrameIdx + (maxFrameIdx-minFrameIdx) * i/NUM_WORKERS) \
