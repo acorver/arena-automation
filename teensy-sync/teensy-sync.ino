@@ -6,8 +6,15 @@ const int PIN_LEDS[] = {1, 3, 5, 7};
 
 #define NUM_LEDS 4
 
-#define BLINK_MICROSECONDS 5000 // Assumes 200 FPS camera rate
-#define BLINK_NUM_FRAMES 5
+#define BLINK_MICROSECONDS 25000 // Assumes 200 FPS camera rate, flash 5 frames (but see TRIGGER_TO_LED_DELAY)
+
+// Assuming there is some potential delay between trigger and led flash... This will make end-alignment less reliable, as some 
+// subset of cameras might pick up an apparent "6th frame".
+// For this reason, we subtract 500 microseconds from the total flash interval (i.e. 24.5 instead of 25 ms flash)
+#define TRIGGER_TO_LED_DELAY 500
+
+// The actual blink duration, precomputed
+const unsigned long BLINK_MICROSECONDS_ACTUAL = BLINK_MICROSECONDS - TRIGGER_TO_LED_DELAY;
 
 // Switch to allow LED's to be continually on, to test Mocap thresholds
 bool g_DebugState; 
@@ -46,9 +53,9 @@ void onTrigger() {
     for (int i = 0; i < NUM_LEDS; i++) {
       digitalWrite(PIN_LEDS[i], HIGH );
     }
-
+    
     // Wait 5 frames
-    delayMicroseconds(BLINK_MICROSECONDS * BLINK_NUM_FRAMES); 
+    delayMicroseconds(BLINK_MICROSECONDS_ACTUAL); 
   } 
 
   // Turn all LED's off
