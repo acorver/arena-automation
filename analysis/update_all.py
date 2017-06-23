@@ -50,40 +50,29 @@ def updateAll_p1(settings):
 
 def updateAll_p2(settings):
     # Process data with Python scripts
-    p1 = extract_flysim.run(async=False, settings=settings)
+    print("Processing Flysim")
+    extract_flysim.run(async=False, settings=settings)
+
     print("Done processing FlySim, now extracting log info.")
-
     extract_log_info.run(settings=settings)
+
     print("Done extracting log info, now computing perch locations.")
-
-    p2 = extract_perch_locations.run(async=False, settings=settings)
-
-    # Make sure the previous processes have finished before starting the next ones
-    # p1.join()
-    # p2.join()
+    extract_perch_locations.run(async=False, settings=settings)
 
     print("Done extracting perch locations, now computing takeoffs / perching locations.")
 
     # After FlySim trajectories have been extracted, we can process perching locations
-    p3 = extract_perching_locations.run(async=False, settings=settings)
+    extract_perching_locations.run(async=False, settings=settings)
 
     # extract_perching_orientations.run(async=True)
     # extract_headmovements.run()
 
-    # Make sure the previous processes have finished before starting the next ones
-    # p3.join()
-
     print("Done processing data, now plotting takeoffs.")
-
-    p5 = plot_takeoffs.run(async=False, settings=settings)
+    plot_takeoffs.run(async=False, settings=settings)
     create_highspeed_links.run(async=False, settings=settings)
 
-    # Make sure the previous processes have finished before generating the final report
-    # p5.join()
-
-    print("Done plotting takeoffs, now generating reports.")
-
     # Generate the final report
+    print("Done plotting takeoffs, now generating reports.")
     generate_reports.run(settings=settings)
 
     # Print done
@@ -110,7 +99,9 @@ def updateAll(settings):
 # =======================================================================================
 
 if __name__ == "__main__":
-    
+
+    print("Starting data processing...")
+
     # Ask for options
     settings = util.askForExtractionSettings()
     
