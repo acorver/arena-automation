@@ -83,25 +83,25 @@ def processTrajectory(trajectory, output, outputTracking, workerID, numTrajector
         
         # Find the best matching markers in each frame (currently multiple markers are added per frame 
         # based on proximity
-        bestMarkers = {}
-        for t in trajectory:
-            iframe = t[1]
-            if not iframe in bestMarkers:
-                bestMarkers[iframe] = []
-            bestMarkers[iframe].append(t)
+        #bestMarkers = {}
+        #for t in trajectory:
+        #    iframe = t[1]
+        #    if not iframe in bestMarkers:
+        #        bestMarkers[iframe] = []
+        #    bestMarkers[iframe].append(t)
 
         # Currently, we just average the markers (in the future, e.g. take re-calibration into account,
         # or compute Confidence Interval in way more sophisticated than just mean)
-        trajectoryNew = []
-        for iframe in sorted(bestMarkers.keys()):
-            meanPos = np.mean([x[2] for x in bestMarkers[iframe]], axis=0)
-            trajectoryNew.append( [
-                bestMarkers[iframe][0][0],
-                bestMarkers[iframe][0][1],
-                meanPos,
-                bestMarkers[iframe][0][3] ])
+        #trajectoryNew = []
+        #for iframe in sorted(bestMarkers.keys()):
+        #    meanPos = np.mean([x[2] for x in bestMarkers[iframe]], axis=0)
+        #    trajectoryNew.append( [
+        #        bestMarkers[iframe][0][0],
+        #        bestMarkers[iframe][0][1],
+        #        meanPos,
+        #        bestMarkers[iframe][0][3] ])
         # Replace trajectory with corrected trajectory
-        trajectory = trajectoryNew
+        #trajectory = trajectoryNew
 
         # Can this be a flysim trajectory? Required minimum amount of displacement
         minBound, maxBound, bboxSpan = trajectoryBBox(trajectory)
@@ -187,7 +187,7 @@ def processTrajectory(trajectory, output, outputTracking, workerID, numTrajector
 # =======================================================================================
 
 # Worker function
-def extractFlysim_Worker(workerIDs, tasks, output, outputTracking):
+def extractFlysim_Worker(workerIDs, tasks, output, outputTracking, debugOutput):
 
     # Get a unique worker ID
     workerID = workerIDs.get()
@@ -211,6 +211,9 @@ def extractFlysim_Worker(workerIDs, tasks, output, outputTracking):
         else:
             # Loop through each frame
             for frame, maxNewTrajFrame, workerID in taskList:
+                # Report debug state
+                debugOutput[workerID].put( (len(openTrajectories), 'streaming') )
+
                 # Calculate Yframe mean positions
                 yframes = [np.nanmean(x.vertices, axis=0) for x in frame.yframes]
             
@@ -224,6 +227,7 @@ def extractFlysim_Worker(workerIDs, tasks, output, outputTracking):
                     if len( openTrajectories[i] ) > MAX_FLYSIM_DURATION_FRAMES or \
                         (frame.frameID - openTrajectories[i][-1][1]) > TRAJ_TIMEOUT:
                         if len( openTrajectories[i] ) <= MAX_FLYSIM_DURATION_FRAMES:
+                            debugOutput[workerID].put(('processing',))
                             numTrajectories = processTrajectory(openTrajectories[i], \
                                 output, outputTracking, workerID, numTrajectories)
                         del openTrajectories[i]
@@ -255,8 +259,9 @@ def extractFlysim_Worker(workerIDs, tasks, output, outputTracking):
                         # trajectories will then be seen as one
                         #     - Compute volume spanned by last 3 seconds (600 frames) of points
                         if len(openTrajectories[t]) > 600:
-                            minBound, maxBound, bboxSpan = trajectoryBBox(openTrajectories[t][(-600):(-1)])
+                            minBound, maxBound, bboxSpan = trajectoryBBox(openTrajectories[t][(-200):(-1)])
                             if bboxSpan < 10:
+                                debugOutput[workerID].put(('processing',))
                                 numTrajectories = processTrajectory(openTrajectories[t], output, \
                                     outputTracking, workerID, numTrajectories)
                                 del openTrajectories[t]
@@ -290,7 +295,11 @@ def processFile(fname, async=True):
     
     # An array of queues of frames to process, one queue for each worker process
     tasks = [multiprocessing.JoinableQueue() for i in range(NUM_WORKERS)]
-    
+
+    # An array for debug output
+    debugOutput = [multiprocessing.JoinableQueue() for i in range(NUM_WORKERS)]
+    debugStates = {}
+
     # An output queue for .flysim.csv data
     output = multiprocessing.Queue()
 
@@ -307,17 +316,21 @@ def processFile(fname, async=True):
     pool = None
     if async:
         if DEBUG:
-            pool = multiprocessing.pool.ThreadPool(NUM_WORKERS, extractFlysim_Worker, (workerIDs, tasks, output, outputTracking))
+            pool = multiprocessing.pool.ThreadPool(NUM_WORKERS, extractFlysim_Worker, (workerIDs, tasks, output, outputTracking, debugOutput))
         else:
-            pool = multiprocessing.Pool(NUM_WORKERS, extractFlysim_Worker, (workerIDs, tasks, output, outputTracking))
-    
-    # Current reading positions in file for each of the worker processes
-    currentStartFramesOfTasks = [int(minFrameIdx + (maxFrameIdx-minFrameIdx) * i/NUM_WORKERS) \
-        for i in range(NUM_WORKERS)]
-    
-    # The maximum frame index at which the worker process is allowed to start a new trajectory (but it's 
+            pool = multiprocessing.Pool(NUM_WORKERS, extractFlysim_Worker, (workerIDs, tasks, output, outputTracking, debugOutput))
+
+    # Find frame chunks
+    frameIDs = list(util.iterMocapFrameIDs(fname, includeRowIDs=False))
+    currentStartFramesOfTasks = [frameIDs[int(float(i) *
+      len(frameIDs) / float(NUM_WORKERS))] for i in range(NUM_WORKERS)]
+    # No need to keep all frameIDs in memory anymore (this was unnecessary in the first place, but convenient)
+    del frameIDs
+
+    # The maximum frame index at which the worker process is allowed to start a new trajectory (but it's
     # still allowed to continue an old trajectory)
-    maxNewTrajFrameOfTasks = [int(x + (maxFrameIdx-minFrameIdx) / NUM_WORKERS)+1 for x in currentStartFramesOfTasks]
+    maxNewTrajFrameOfTasks = [(currentStartFramesOfTasks[i+1]-1) if
+      (i+1) < NUM_WORKERS else maxFrameIdx for i in range(NUM_WORKERS)]
     
     # Worker status
     workerDone = [False for i in range(NUM_WORKERS)]
@@ -372,10 +385,16 @@ def processFile(fname, async=True):
                 
             # Update on progress
             if (datetime.datetime.now() - lastProgressReportTime).total_seconds() > 5:
+
+                for qdi in range(len(debugOutput)):
+                    while not debugOutput[qdi].empty():
+                        debugStates[qdi] = debugOutput[qdi].get()
+                dbgStr = ','.join([str(debugStates[x][0]) for x in debugStates])
+
                 lastProgressReportTime = datetime.datetime.now()
                 s = "/" + str(totalNumFrames)+" ("+'{0:.{1}f}'.format(
                         100*numFramesProcessed/totalNumFrames, 3)+'%)'
-                print("Processed "+str(numFramesProcessed)+s+" frames")
+                print("Processed "+str(numFramesProcessed)+s+" frames: "+dbgStr)
                 
             # Limit how often this runs
             sleep(0.5)
