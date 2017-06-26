@@ -241,7 +241,7 @@ def getAllMarkersInFrame(frame):
 # Iterate over available frameIDs
 # =======================================================================================
 
-def iterMocapFrameIDs(fname):
+def iterMocapFrameIDs(fname, includeRowIDs=True):
 
     # Get the index file, and ensure it exists
     fileIdx = fname.replace('.msgpack', '.msgpack.index')
@@ -254,7 +254,10 @@ def iterMocapFrameIDs(fname):
     c = conn.cursor()
     i = 0
     for x in c.execute('select frameID from idx',()):
-        yield i, x[0]
+        if includeRowIDs:
+            yield i, x[0]
+        else:
+            yield x[0]
         i += 1
     conn.close()
 
@@ -277,7 +280,9 @@ class MocapFrameIterator:
         self.numFrames = numFrames
         self.nearbyVertexRange = nearbyVertexRange
 
-        if file.endswith('.msgpack'):
+        if not os.path.exists(file):
+            self.unpacker = None
+        elif file.endswith('.msgpack'):
 
             # Open the data file
             self.f = open(file,'rb')
@@ -317,6 +322,9 @@ class MocapFrameIterator:
             raise StopIteration
     
     def __next__(self):
+        if self.unpacker is None:
+            self.stopIteration()
+
         try:
             x = self.unpacker.unpack(write_bytes=self.counter)
                     
@@ -565,10 +573,10 @@ def loadFlySim(file):
         fsTracking = fsTracking.groupby(['trajectory',]).apply(f)
         idx = (fsTracking.groupby(['trajectory','frame'])['_e'].transform(min) == fsTracking._e)
         fsTracking['istraj'] = np.repeat(False, fsTracking.shape[0])
-        fsTracking['istraj'][idx] = np.repeat(True, sum(idx))
-        
+        fsTracking.loc[idx, 'istraj'] = True
+
         return fsTracking
     except pd.io.common.EmptyDataError as e:
         return None
-    except:
+    except Exception as e2:
         return None
