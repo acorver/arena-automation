@@ -47,9 +47,50 @@ shall be referred to as the
     * Test backpack
 
 ## Practical step-by-step guide
-**Step 1**: Launch
+**Step 1**: Launch the *Arena Automation Web Interface*
 
-- Mention TeamViewer
+Click the following icon on the Photron PC:
+![Starting The Web Interface](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_interface_launch_icon.png)
+
+This will bring up a command window that will stay open,
+and can be minimized to the background:
+![The web interface command window](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_interface_launch_cmdwindow.png)
+
+Now open a browser (still on the Photron PC), and navigate
+to "http://localhost." (Note that depending on the network
+configuration, this same web interface can be viewed
+on other computers using the Photron PC's IP address.)
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_log.png)
+
+Now click on "Power" in the side menu, which opens the following page:
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_power.png)
+
+Click both buttons to power on the motion capture cameras,
+the Photrons, the FlySim motors, and the Telemetry --- assuming all these are connected and the power relays are
+not manually turned off. The sysem will indicate when
+the power is on:
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_power_on.png)
+
+Now start the *Arena Automation System* software on the Photron PC:
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_launch_icon.png)
+
+This also brings up a command line window that can be minimized:
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_launch_cmdwindow.png)
+
+Now go back to the browser, and navigate to the "Log" page
+in the web interface. This page opens by default when you
+navigate to "localhost." This page will now display log
+information:
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_log_running.png)
+
+We can now navigate to the FlySim interface to send commands to FlySim:
+![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_flysim.png)
+
+...
+
+To turn the system off at night, log into the Photron PC remotely using TeamViewer:
+
+...
 
 ## Technical documentation
 ### High-level overview
@@ -59,8 +100,6 @@ pipeline. The real-time system has three main goals:
 
 #### The realtime pipeline
 * **Goal 1: Save all motion capture data**.
-
-![Starting The Web Interface](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_interface_launch_icon.png)
 
 The real-time system
 receives every single 3D marker point, and saves its XYZ
