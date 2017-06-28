@@ -60,7 +60,7 @@ pipeline. The real-time system has three main goals:
 #### The realtime pipeline
 * **Goal 1: Save all motion capture data**.
 
-![Starting The Web Interface](arena_interface_launch_icon.png)
+![Starting The Web Interface](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_interface_launch_icon.png)
 
 The real-time system
 receives every single 3D marker point, and saves its XYZ
