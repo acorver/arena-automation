@@ -17,29 +17,24 @@ if __name__ == "__main__":
 # Imports for this script
 # =======================================================================================
 
-import numpy as np
-import msgpack, collections, math, os, multiprocessing, sys, csv
+import numpy as np, pandas as pd
+import os, multiprocessing, gc
 from time import time
-#from datetime import datetime
-import statsmodels.api as sm
 import statsmodels.formula.api as smf
-import pandas as pd
 from scipy import stats
-import gc
+
 from shared import util
+from shared import trajectories
 
 # =======================================================================================
 # Global constants
 # =======================================================================================
 
 # Set "overwrite" to True to overwrite existing files
-OVERWRITE = True
+OVERWRITE = False
 
 # ...
 DEBUG = False
-#SINGLEFILE = '2016-11-11 12-20-41_Cortex.msgpack'
-#SINGLEFILE = '2016-11-14 14-09-32_Cortex.msgpack'
-#SINGLEFILE = '2016-12-10 12-18-45.msgpack'
 SINGLEFILE = ''
 IGNORE_COUNT = False
 
@@ -151,7 +146,7 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
         
         ## Save framenumber when trajectory reached its peak
         framePeak = max(frames, key=lambda x:x.pos[2]).frame
-        
+
         ## Is this trajectory never diverging from flysim point?
         data = { 'f': [], 'd': [] }
         minframe = min([x.frame for x in frames])
@@ -171,7 +166,7 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
             flysimTraj = flysimTraj[0][0]
         else:
             flysimTraj = -1
-        
+
         ## Range of the first 2 seconds (400 frames)
         bboxSize = np.linalg.norm(np.ptp([x.pos for x in trajectory if x.frame >= fr[1] and x.frame < fr[1] + 400], axis=0))
 
@@ -179,10 +174,10 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
         R2 = -1
         params = [0, 0, 0]
         if len(data['f'])>0:
-            f = smf.ols(formula="d ~  f + np.power(f,2)", data=data).fit() 
+            f = smf.ols(formula="d ~  f + np.power(f,2)", data=data).fit()
             R2 = f.rsquared
             params = f.params.tolist()
-        
+
         ## Save
         takeoff = [fr[1], fr[1]-fr[0], frames[0].trajectory, frames[0].time, util.getTimeStr(frames[0].time), 
             bboxSize, maxUpwardSpeed,framePeak,flysimTraj] + params + [R2,]
@@ -200,7 +195,9 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
         takeoff  = min(a, key=lambda x:x[1])[0][0] if len(a)>0 else -1
         relFrame = min(a, key=lambda x:x[1])[0][1] if len(a)>0 else ''
         # Save
-        foTracking.write( ','.join([str(x) for x in [t.frame, relFrame, t.trajectory, t.time, util.getTimeStr(t.time), takeoff, ] + t.pos.tolist()]) + '\n' )
+        foTracking.write( ','.join([str(x) for x in [t.frame, relFrame,
+          t.trajectory, t.time, util.getTimeStr(t.time), takeoff, ] + t.pos.tolist() +
+            t.vertices[0].tolist() + t.vertices[1].tolist() + t.vertices[2].tolist()]) + '\n' )
     
     return takeoffID
 
@@ -230,111 +227,175 @@ def processFile(file):
     # Don't overwrite existing file
     if not OVERWRITE and os.path.isfile( fnamePerches ): 
         print("Skipping file: "+file)
-        return
-
-    # Debug header
-    dbgHeader = "["+file.replace('_Cortex.msgpack','')[0:30]+"] "
-
-    # Read known flysim locations
-    print(dbgHeader+"Started reading flysim")
-    fsTracking = util.loadFlySim(file) 
-    flysim = {}
-    if fsTracking != None:
-        for (rowid, row) in fsTracking.iterrows():
-            frame = int(row['frame'])
-            if row['is_flysim'] and row['framestart'] <= frame and \
-                frame <= row['frameend']:
-                flysim[frame] = (row['flysimTraj'], np.array([row['flysim.'+c] for c in ['x','y','z']]))
-        print(dbgHeader+"Finished reading flysim")
     else:
-        print(dbgHeader+"Failed to read flysim... processed flysim data not found")
-    
-    # Open trajectories
-    openTrajectories = []
-    trajectoryID = 0
+        # Debug header
+        dbgHeader = "["+file.replace('_Cortex.msgpack','')[0:30]+"] "
 
-    # Start loop
-    lastInfoTime = time()
-    numRecords = 0
-    totalNumRecords = util.countRecords(file)
+        # Read known flysim locations
+        print(dbgHeader+"Started reading flysim")
+        fsTracking = util.loadFlySim(file)
+        flysim = {}
+        if fsTracking is not None:
+            for (rowid, row) in fsTracking.iterrows():
+                frame = int(row['frame'])
+                if row['is_flysim'] and row['framestart'] <= frame and frame <= row['frameend']:
+                    flysim[frame] = (row['flysimTraj'], np.array([row['flysim.'+c] for c in ['x','y','z']]))
+            print(dbgHeader+"Finished reading flysim")
+        else:
+            print(dbgHeader+"Failed to read flysim... processed flysim data not found")
 
-    takeoffID = 0
+        # Open trajectories
+        openTrajectories = []
+        trajectoryID = 0
 
-    # ...
-    with open(fnamePerches,'w') as foPerches, \
-        open(fnameTakeoffs,'w') as foTakeoffs, open(fnameTracking,'w') as foTracking, \
-        open(fnameDebug,'w') as foFsDbg:
-        
-        # Write headers for output files
-        
-        foTakeoffs.write('frame,perchframes,trajectory,timestamp,time,bboxsize,upwardVelocityMax,framepeak,flysimTraj,p1,p2,p3,r2\n')
-        
-        foPerches.write('framestart,frameend,numframes,trajectory,x,y,z,minx,miny,minz,' + \
-            'maxx,maxy,maxz,timestampstart,timestampend,timestart,timeend\n')
-        
-        foTracking.write('frame,relframe,trajectory,timestamp,time,takeoffTraj,x,y,z\n')
+        # Start loop
+        lastInfoTime = time()
+        numRecords = 0
+        totalNumRecords = util.countRecords(file)
 
-        for frame in util.readYFrames(file):
-            # Print debug info
-            numRecords += 1
-            if (time() - lastInfoTime) > 5.0:
-                lastInfoTime = time()
-                print( (dbgHeader + str(numRecords) +
-                    " frames [{0:.2f}%], " + str(len(openTrajectories)) +
-                    " open traj").format(numRecords*100.0/totalNumRecords) )
+        takeoffID = 0
 
-            # Find corresponding trajectory index 
-            minDist = 1e6
-            t = -1
-            i = 0
-            while i < len(openTrajectories):
-                # Check if trajectory timed out
-                if frame.frame - openTrajectories[i][-1].frame > TRAJ_TIMEOUT:
-                    takeoffID = processTrajectory(openTrajectories[i], foPerches, foTakeoffs, foTracking, foFsDbg, takeoffID, flysim)
-                    del openTrajectories[i]
+        # ...
+        with open(fnamePerches,'w') as foPerches, \
+            open(fnameTakeoffs,'w') as foTakeoffs, open(fnameTracking,'w') as foTracking, \
+            open(fnameDebug,'w') as foFsDbg:
+
+            # Write headers for output files
+
+            foTakeoffs.write('frame,perchframes,trajectory,timestamp,time,bboxsize,upwardVelocityMax,framepeak,flysimTraj,p1,p2,p3,r2\n')
+
+            foPerches.write('framestart,frameend,numframes,trajectory,x,y,z,minx,miny,minz,' + \
+                'maxx,maxy,maxz,timestampstart,timestampend,timestart,timeend\n')
+
+            foTracking.write('frame,relframe,trajectory,timestamp,time,takeoffTraj,x,y,z,x1,y1,z1,x2,y2,z2,x3,y3,z3\n')
+
+            for frame in util.readYFrames(file):
+                # Print debug info
+                numRecords += 1
+                if (time() - lastInfoTime) > 5.0:
+                    lastInfoTime = time()
+                    print( (dbgHeader + str(numRecords) +
+                        " frames [{0:.2f}%], " + str(len(openTrajectories)) +
+                        " open traj").format(numRecords*100.0/totalNumRecords) )
+
+                # Find corresponding trajectory index
+                minDist = 1e6
+                t = -1
+                i = 0
+                while i < len(openTrajectories):
+                    # Check if trajectory timed out
+                    if frame.frame - openTrajectories[i][-1].frame > TRAJ_TIMEOUT:
+                        takeoffID = processTrajectory(openTrajectories[i],
+                          foPerches, foTakeoffs, foTracking, foFsDbg, takeoffID, flysim)
+                        del openTrajectories[i]
+                    else:
+                        # If not, evaluate whether it's the closest one
+                        d = np.linalg.norm(frame.pos - openTrajectories[i][-1].pos)
+                        if d < minDist:
+                            minDist = d
+                            t = i
+                        i+=1
+
+                # add data to existing or new trajectory
+                p = None
+                if t != -1 and minDist < TRAJ_MAXDIST:
+                    p = util.updateYFrame(frame, trajectory=openTrajectories[t][-1].trajectory)
+                    openTrajectories[t].append( p )
                 else:
-                    # If not, evaluate whether it's the closest one
-                    d = np.linalg.norm(frame.pos - openTrajectories[i][-1].pos)
-                    if d < minDist:
-                        minDist = d
-                        t = i
-                    i+=1
-            
-            # add data to existing or new trajectory
-            p = None
-            if t != -1 and minDist < TRAJ_MAXDIST:
-                p = util.updateYFrame(frame, trajectory=openTrajectories[t][-1].trajectory)
-                openTrajectories[t].append( p )
-            else:
-                trajectoryID += 1
-                p = util.updateYFrame(frame, trajectory=trajectoryID)
-                openTrajectories.append([p,])
-        
-        # Process remaining open trajectories
-        for t in openTrajectories:
-            takeoffID = processTrajectory(t, foPerches, foTakeoffs, foTracking, foFsDbg, takeoffID, flysim)
-    
+                    trajectoryID += 1
+                    p = util.updateYFrame(frame, trajectory=trajectoryID)
+                    openTrajectories.append([p,])
+
+            # Process remaining open trajectories
+            for t in openTrajectories:
+                takeoffID = processTrajectory(t, foPerches, foTakeoffs, foTracking, foFsDbg, takeoffID, flysim)
+
+    # Produce an easier to use subset of the data (actual takeoffs)
+    produceConvenientSubset(file)
+
     # Done
     gc.collect()
-    
+
+# =======================================================================================
+# Produce an easier to use subset of the data (actual takeoffs)
+# =======================================================================================
+
+def produceConvenientSubset(fname):
+
+    data = trajectories.getTakeoffData(fname)
+
+    if data is None:
+        return
+
+    # Add flysim data, if it exists
+    flysim = trajectories.getFlysimData(fname)
+    if flysim is not None:
+        flysim = flysim.rename(index=str, columns={'trajectory': 'flysim_trajectory',
+                                'x': 'x_fs', 'y': 'y_fs', 'z': 'z_fs'})
+        data = data.join(flysim, on='frame', how='left', rsuffix='_')
+
+    # Convert data into long format
+    ndata = None
+    for s in ['','1','2','3','_fs']:
+        if ('x'+s) in data:
+            d = data[['frame','trajectory','timestamp','time','x'+s,'y'+s,'z'+s]]
+            d.columns = ['frame','trajectory','timestamp','time','x','y','z']
+            if s == '':
+                d.ix[:,'type'] = 'yf_center'
+            elif s == '1':
+                d.ix[:,'type'] = 'yf_bl'
+            elif s == '2':
+                d.ix[:,'type'] = 'yf_fc'
+            elif s == '3':
+                d.ix[:,'type'] = 'yf_br'
+            elif s == '_fs':
+                d.ix[:,'type'] = 'flysim'
+            ndata = d if ndata is None else ndata.append(d)
+    data = ndata
+
+    # Add all other markers to this dataset, so we can verify whether a flysim event was missed,
+    # etc.
+    frames = data.frame.unique()
+    d = []
+    for frame in util.MocapFrameIterator(fname):
+        if frame.frameID in frames:
+            for m in util.getAllMarkersInFrame(frame):
+                d.append([frame.frameID,] + m)
+    d = pd.DataFrame(np.array(d), columns=['frame','x','y','z'])
+    d.frame = d.frame.astype(np.int64)
+    ndata = pd.merge(data, d, on='frame', how='right', suffixes=['','_'])
+    ndata = ndata[['frame','trajectory','timestamp','time','x_','y_','z_']]
+    ndata.columns = ['frame', 'trajectory', 'timestamp', 'time', 'x', 'y', 'z']
+    ndata.ix[:,'type'] = 'all'
+    data = data.append(ndata)
+
+    # Save
+    fnameOut = fname.replace('.raw.msgpack','').replace('.msgpack','') + '.mocap.all.csv'
+    data.to_csv(fnameOut)
+    fnameOut = fname.replace('.raw.msgpack','').replace('.msgpack','') + '.mocap.csv'
+    data[data.type!='all'].to_csv(fnameOut)
+
 # =======================================================================================
 # Entry point
 # =======================================================================================
 
 def run(async=False, settings=None):
-    
+
+    util.setProcessPriority(util.HIGHEST_PRIORITY)
+
     if SINGLEFILE != "":
         processFile(SINGLEFILE)
     else:
         # Get files
         if settings == None:
-            settings = util.askForExtractionSettings()
+            settings = util.askForExtractionSettings(allRecentFilesIfNoneSelected=True)
 
         if not DEBUG:
             if len(settings.files) == 1:
                 processFile(settings.files[0])
             else:
-                with multiprocessing.Pool(processes=16) as pool:
+                util.setProcessPriority(util.LOWEST_PRIORITY)
+                with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
                     (pool.map_async if async else pool.map)(processFile, settings.files)
                     return pool
         else:
