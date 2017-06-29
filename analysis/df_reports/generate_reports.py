@@ -33,35 +33,36 @@ import gc, shutil, math, dateutil, datetime
 from distutils import dir_util
 import numpy as np
 import pandas as pd
-from scipy import interpolate
 import seaborn as sns
-import matplotlib as mpl
-import matplotlib.animation as mpl_animation
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import imageio
 from jinja2 import Environment, FileSystemLoader
 from vispy import app, gloo, scene
 import vispy.visuals, vispy.scene, vispy.scene.visuals
-from vispy.color import Color
 from shared import util
 import multiprocessing
+import traceback
+import ntpath
+import ipyvolume.pylab as p3
+
+from shared import trajectories
 
 # ========================================================
 # Global Variables
 # ========================================================
 
 # Change output directory
-DIR_REPORTS         = '../reports/'
+DIR_REPORTS         = '../../reports/'
 DIR_DATA            = ''
 SINGLEFILE          = ''
-OVERWRITE           = True
+OVERWRITE           = False
 SHOW_3DCANVAS       = False
 IMG_DPI             = 200
 PLOT_APPEND_BEFORE  = 25
 PLOT_APPEND_AFTER   = 200
 RENDER_SIZE_3D      = (1400, 1000)
-DEBUG               = True
+DEBUG               = False
+SYNCHRONOUS         = True
 
 PLOT_TRAJECTORIES_3D_NUMFRAMES = 200
 
@@ -92,7 +93,7 @@ def getDataTakeoffs(data):
     dataTakeoffs = dataTakeoffs.rename(columns=lambda x: x.strip())
     dataTakeoffs['time_bin'] = [roundTime(dateutil.parser.parse(x),300) \
         for x in dataTakeoffs['time']]
-    
+
     return dataTakeoffs
 
 def getDataPerches(data):
@@ -236,80 +237,135 @@ def plotTrajectories3D(dir, data):
     # Skip if already created video
     if not os.path.isfile(foutname) or OVERWRITE:
         # Load takeoff info
-        dataTakeoff = getDataTakeoffs(data)
-        
-        # Select yframe frames
-        dataDf    = pd.read_csv(file.replace('.msgpack','.tracking.csv'))
-        dataDf['takeoffFrame'] = dataDf['relframe'] # TMP #
-        
-        if len(dataDf.index) == 0: 
+        dataTakeoffs = getDataTakeoffs(data)
+
+        if len(dataTakeoffs) == 0:
             data['srcTrajectories3D'] = 'Not Available'
-            return
-        
-        takeoffFrame = dataDf.takeoffFrame.tolist()[0]
-        
-        # Plot yframe data
-        canvas = vispy.scene.SceneCanvas(show=SHOW_3DCANVAS, size=RENDER_SIZE_3D)
-        grid = canvas.central_widget.add_grid(spacing=10)
-        widget_1 = grid.add_widget(row=0, col=0)
-        widget_1.bgcolor = "#fff"
-        view = widget_1.add_view()
-        view.bgcolor = '#fff'
-        
-        cm = vispy.color.get_colormap('husl')
-        uniqueTrajs = np.unique(dataDf.as_matrix(['trajectory',]))
-        
-        for traji, traj in zip(range(len(uniqueTrajs)),uniqueTrajs):
-            c = cm[(traj%10)/10.0]
-            d = dataDf[dataDf.trajectory==traj].as_matrix(['x','y','z'])
-            if d.shape[0] > 0:
-                vispy.scene.visuals.Line(
-                    pos=d,
-                    color=c,
-                    antialias=True,
-                    connect='strip',
+        else:
+            # Plot yframe data
+            canvas = vispy.scene.SceneCanvas(show=SHOW_3DCANVAS, size=RENDER_SIZE_3D)
+            grid = canvas.central_widget.add_grid(spacing=10)
+            widget_1 = grid.add_widget(row=0, col=0)
+            widget_1.bgcolor = "#fff"
+            view = widget_1.add_view()
+            view.bgcolor = '#fff'
+
+            cm = vispy.color.get_colormap('husl')
+
+            for traji, traj in dataTakeoffs.iterrows():
+                c = cm[(traji%10)/10.0]
+                d = trajectories.getTakeoff(file, traj.trajectory, traj.frame).as_matrix(['x','y','z'])
+                if d.shape[0] > 0:
+                    vispy.scene.visuals.Line(
+                        pos=d,
+                        color=c,
+                        antialias=True,
+                        connect='strip',
+                        parent=view.scene)
+
+            # Set camera view
+            view.camera = 'turntable'
+            #view.camera.elevation = 45
+            view.camera.distance = 1000
+            view.camera.azimuth = 135
+
+            xax = scene.Axis(pos='x', view=view, tick_direction=(0, 1, 0),
+                     font_size=20, axis_color='k', tick_color='k', text_color='k',
+                     major_tick_length=10, minor_tick_length=5,
+                     major_density = 0.2, minor_density = 0.2,
+                     parent=view.scene)
+            yax = scene.Axis(pos='y', view=view, tick_direction=(1, 0, 0),
+                    font_size=20, axis_color='k', tick_color='k', text_color='k',
+                    major_tick_length=10, minor_tick_length=5,
+                     major_density = 0.2, minor_density = 0.2,
                     parent=view.scene)
-        
-        # Set camera view
-        view.camera = 'turntable'
-        #view.camera.elevation = 45
-        view.camera.distance = 1000
-        view.camera.azimuth = 135
+            zax = scene.Axis(pos='z', view=view, tick_direction=(1, 0, 0),
+                    font_size=20, axis_color='k', tick_color='k', text_color='k',
+                    major_tick_length=10, minor_tick_length=5,
+                     major_density = 0.2, minor_density = 0.2,
+                    parent=view.scene)
+            g = scene.AxisGrid([xax, yax, zax], parent=view.scene, minor_color='#555',
+                major_color='#222', bg_color='#0002')
 
-        xax = scene.Axis(pos='x', view=view, tick_direction=(0, 1, 0),
-                 font_size=20, axis_color='k', tick_color='k', text_color='k',
-                 major_tick_length=10, minor_tick_length=5,
-                 major_density = 0.2, minor_density = 0.2, 
-                 parent=view.scene)
-        yax = scene.Axis(pos='y', view=view, tick_direction=(1, 0, 0),
-                font_size=20, axis_color='k', tick_color='k', text_color='k',
-                major_tick_length=10, minor_tick_length=5,
-                 major_density = 0.2, minor_density = 0.2, 
-                parent=view.scene)
-        zax = scene.Axis(pos='z', view=view, tick_direction=(1, 0, 0),
-                font_size=20, axis_color='k', tick_color='k', text_color='k',
-                major_tick_length=10, minor_tick_length=5,
-                 major_density = 0.2, minor_density = 0.2, 
-                parent=view.scene)
-        g = scene.AxisGrid([xax, yax, zax], parent=view.scene, minor_color='#555', 
-            major_color='#222', bg_color='#0002')
-        
-        writer = imageio.get_writer(foutname)
-        for i in range(PLOT_TRAJECTORIES_3D_NUMFRAMES):
-            im = canvas.render()
-            writer.append_data(im)
-            view.camera.azimuth = \
-                110 + 60*i/PLOT_TRAJECTORIES_3D_NUMFRAMES
-        writer.close()
+            writer = imageio.get_writer(foutname)
+            for i in range(PLOT_TRAJECTORIES_3D_NUMFRAMES):
+                im = canvas.render()
+                writer.append_data(im)
+                view.camera.azimuth = \
+                    110 + 60*i/PLOT_TRAJECTORIES_3D_NUMFRAMES
+            writer.close()
 
-        # Close figure in order to release memory
-        gc.collect()
-        
-        # Rename file to indicate we're done
-        # os.rename(foutnameTmp, foutname)
-        
+            # Close figure in order to release memory
+            gc.collect()
+
+            # Rename file to indicate we're done
+            # os.rename(foutnameTmp, foutname)
+
     # Save location of file
     data['srcTrajectories3D'] = foutfname
+
+# ========================================================
+# Plot trajectories in 3D (interactive)
+# ========================================================
+
+def plotTrajectories3DInteractive(dir, data):
+
+    fname = data['file']
+
+    #takeoffs = trajectories.getTakeoffData(fname)
+    #takeoffs = takeoffs.as_matrix(['x','y','z'])
+    #flysim = pd.read_csv(fname.replace('.msgpack', '') + '.flysim.csv')
+    #flysim = flysim.rename(columns=lambda x: x.strip())
+    #tracking = pd.read_csv(fname.replace('.msgpack', '') + '.flysim.tracking.csv')
+    #tracking = tracking[tracking.trajectory.isin(flysim.flysimTraj[flysim.is_flysim])]
+    #tracking = tracking.as_matrix(['x','y','z'])
+
+    mocap = pd.read_csv(fname.replace('.raw.msgpack','').replace('.msgpack','')+'.mocap.all.csv')
+
+    # ===================================================
+    # Helper function
+    # ===================================================
+
+    def _plot(d, suffix=''):
+        takeoffs = d[d.type == 'yf_center'][::3].as_matrix(['x', 'y', 'z'])
+        flysim = d[d.type == 'flysim'][::3].as_matrix(['x', 'y', 'z'])
+        flysim = flysim[~np.isnan(flysim).any(axis=1)]
+
+        p3.figure(width=1000, height=600)
+        if takeoffs.shape[0] > 0:
+            p3.scatter(takeoffs[:, 0], takeoffs[:, 1], takeoffs[:, 2], size=0.40, color='#222')
+        if flysim.shape[0] > 0:
+            p3.scatter(flysim[:, 0], flysim[:, 1], flysim[:, 2], size=0.15, color='#a22')
+
+        fnameOut = os.path.join(dir, '_tmp.html')
+        p3.save(fnameOut, copy_js=True, makedirs=True)
+        with open(fnameOut, 'r') as f:
+            c = f.read().replace('"', '&quot;')
+            k = 'snippets_takeoffs'+suffix
+            if k not in data:
+                data[k] = c
+            else:
+                if not isinstance(data[k], list):
+                    data[k] = [data[k], c]
+                else:
+                    data[k].append(c)
+        os.remove(fnameOut)
+
+    # ===================================================
+    # Plot each trajectory individually
+    # ===================================================
+
+    g = mocap.groupby('trajectory')
+    for i in range(len(g)):
+        _plot(g.nth(i), '_individual')
+
+    # ===================================================
+    # Plot all takeoffs
+    # ===================================================
+
+    _plot(mocap)
+
+    pass
 
 # ========================================================
 # Trial statistics
@@ -317,17 +373,19 @@ def plotTrajectories3D(dir, data):
 
 def plotTrialStatistics(dir, data):
     # Plot trial statistics
-    dataTrials = pd.read_csv('2016-11-14 14-09-16.trials.csv', sep=',')
+    dataTrials = pd.read_csv(data['file'].replace('.msgpack','')+'.trials.csv', sep=',')
     dataTrials = dataTrials.rename(columns=lambda x: x.strip())
 
     fig = plt.figure(figsize=(8,6), dpi=IMG_DPI)
     ax1 = fig.add_subplot(221)
     ax2 = fig.add_subplot(222)
     ax3 = fig.add_subplot(223)
-    
-    sns.distplot(dataTrials['speed'] , ax=ax1)
-    sns.distplot(dataTrials['height'], ax=ax2)
-    sns.distplot(dataTrials['wait']  , ax=ax3)
+    ax4 = fig.add_subplot(224)
+
+    sns.distplot(dataTrials['speed'], ax=ax1)
+    sns.distplot(dataTrials['speedchange'], ax=ax2)
+    sns.distplot(dataTrials['height'], ax=ax3)
+    sns.distplot(dataTrials['wait']  , ax=ax4)
     
     # Save plot
     outName = 'trial_statistics.png'
@@ -343,7 +401,8 @@ def plotTrialStatistics(dir, data):
 
 def loadMetadata(dir, data):
     
-    data['report_date'] = data['file'][:data['file'].find('_')]
+    data['report_date'] = ntpath.basename(data['file']).\
+        replace('.raw.msgpack','').replace('.msgpack','')
     
     data['timespan'] = ''
 
@@ -352,36 +411,41 @@ def loadMetadata(dir, data):
 # ========================================================
 
 def plotTrajectoryProperties(dir, data):
-    # Of the takeoffs, what is the bounding box size distribution?
-    fig = plt.figure(figsize=(12,8), dpi=600)
-    ax1 = fig.add_subplot(121)
-    ax2 = fig.add_subplot(122)
-    
-    # Load takeoff statistics
-    dataTakeoffs = getDataTakeoffs(data)
-    
-    # Plot:
-    d = dataTakeoffs[dataTakeoffs.perchframes>200] #<(200*3600*1)]
-    sns.distplot(np.log10(d.perchframes/(200*60)), ax=ax1)
-
-    # Plot:
-    d = dataTakeoffs[dataTakeoffs.perchframes>=200]
-    sns.distplot(d.bboxsize, ax=ax2)
-
-    # Set titles/labels
-    ax1.set_title("Perching Length Distribution Before Takeoff")
-    ax2.set_title("Bounding Box Size Distribution of Takeoffs")
-
-    ax1.set(xlabel='Log(Perching Time in Minutes)', ylabel='Proportion')
-    ax2.set(xlabel='Bounding Box Diameter', ylabel='Proportion')
-    
-    # Save plot
     outName = 'traj_statistics.png'
     outFile = dir + outName
-    fig.savefig(outFile, dpi=IMG_DPI)
-    plt.close(fig)
-    
+
+    # Load takeoff statistics
+    dataTakeoffs = trajectories.getTakeoffs(data['file'])
+
+    if not os.path.exists(outFile):
+        # Of the takeoffs, what is the bounding box size distribution?
+        fig = plt.figure(figsize=(12,8), dpi=600)
+        ax1 = fig.add_subplot(121)
+        ax2 = fig.add_subplot(122)
+
+        # Plot:
+        d = dataTakeoffs[dataTakeoffs.perchframes>200] #<(200*3600*1)]
+        sns.distplot(d.perchframes/(200*60), ax=ax1, bins=20)
+
+        # Plot:
+        d = dataTakeoffs[dataTakeoffs.perchframes>=200]
+        sns.distplot(d.bboxsize, ax=ax2, bins=20)
+
+        # Set titles/labels
+        ax1.set_title("Perching Length Distribution Before Takeoff")
+        ax2.set_title("Bounding Box Size Distribution of Takeoffs")
+
+        ax1.set(xlabel='Perching Time in Minutes', ylabel='Proportion')
+        ax2.set(xlabel='Bounding Box Diameter', ylabel='Proportion')
+
+        # Save plot
+        fig.savefig(outFile, dpi=IMG_DPI)
+        plt.close(fig)
+
     data['srcTrajStatistics'] = outName
+
+    # Save number of takeoffs
+    data['numTakeoffs'] = len(dataTakeoffs)
 
 # ========================================================
 # Plot daily activity
@@ -435,7 +499,7 @@ def plotFlysimVelocity(dir, data):
         x['zspan'] = x['flysim.z'].max() - x['flysim.z'].min()
         return x
     fs = fs.groupby(['trajectory',]).apply(f)
-    fs = fs[ (d.is_flysim) & (d.zspan<50) & (d.minz>100) ]
+    fs = fs[ (fs.is_flysim) & (fs.zspan<50) & (fs.minz>100) ]
     
     # 
     
@@ -459,8 +523,9 @@ def plotFlysim3D(dir, data):
     outName = 'flysim3d.png'
 
     # TEMPORARY: FILTER OUT BY HEIGHT, THIS CONDITION IS NOW INCORPORATED INTO extract_flysim.py
-    d = d[ (d.is_flysim) & (d.zspan<50) & (d.minz>100) ]
-    
+    #d = d[(d.is_flysim) & (d.zspan < 50) & (d.minz > 100)]
+    d = fs[fs.is_flysim]
+
     plot3D(d, d.trajectory, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
     
     data['srcFlysim3D'] = outName
@@ -470,8 +535,7 @@ def plotFlysim3D(dir, data):
     d = d[d.istraj]
     plot3D(d, d.trajectory, dir+outName, cols=['flysim.x','flysim.y','flysim.z'])
     data['srcFlysim3D_nonoise'] = outName
-    
-    
+
     gc.collect()
 
 # ========================================================
@@ -479,75 +543,78 @@ def plotFlysim3D(dir, data):
 # ========================================================
 
 def processFile(file):
-    
-    # Determine output directory/files
-    dir = DIR_REPORTS + file[:(file.find('_') if '_' in file else len(file))].replace('.msgpack','') + '/'
-    outFile = dir + 'index.html'
-    
-    # Initialize report directory
-    # shutil.rmtree(dir, ignore_errors=True)
-    srcPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates/static/')
-    dir_util.copy_tree(srcPath, dir)
+    try:
+        # Determine output directory/files
+        dir = os.path.abspath(os.path.join(os.path.dirname(__file__),DIR_REPORTS))
+        fname = ntpath.basename(file)
+        dir = os.path.join(dir, fname[:(fname.find('_') if '_' in fname
+                                       else len(fname))].replace('.msgpack','') + '/')
+        outFile = dir + 'index.html'
 
-    # Create Jinja environment (for HTML template rendering)
-    envPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates/')
-    env = Environment(loader=FileSystemLoader(envPath))
-    template = env.get_template('index.html')
-    
-    # Initialize report data
-    data = {}
-    data['file'] = file
-    data['errors'] = []
-    
-    # Generate data
-    for f in [\
-        plotFlysim3D, plotPerchingLocations2D, \
-        plotTrajectories3D, loadMetadata, plotTrialStatistics, \
-        plotTrajectoryProperties, plotDailyActivity]:
-        # Due to missing data, etc., some functions occasionally fail. However, we don't want this to crash 
-        # the generation of the remaining part of the report, so catch and report any exception here
-        if DEBUG:
-            f(dir, data)
-        else:
-            try:
-                # Compute data
-                f(dir, data)        
-            except Exception as e:
-                # Log this error, so it can be displayed in the HTML report
-                data['errors'].append( str(e) )
-                # Log to an error log file as well
-                with open(dir + 'log.txt','a') as f:
-                    f.write(traceback.format_exc() + '\n\n')
-    
-    # Write template
-    with open(outFile, 'w') as fo:
-        fo.write(template.render(data).replace(u'\ufeff',u''))
+        # Initialize report directory
+        # shutil.rmtree(dir, ignore_errors=True)
+        srcPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates/static/')
+        dir_util.copy_tree(srcPath, dir)
+
+        # Create Jinja environment (for HTML template rendering)
+        envPath = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates/')
+        env = Environment(loader=FileSystemLoader(envPath))
+        template = env.get_template('index.html')
+
+        # Initialize report data
+        data = {}
+        data['file'] = file
+        data['errors'] = []
+
+        # Generate data
+        for f in [ \
+            plotTrajectories3DInteractive, #plotTrajectories3D,
+            #plotTrajectoryProperties, plotDailyActivity,
+            #plotTrialStatistics, plotFlysim3D, plotPerchingLocations2D, \
+            loadMetadata]:
+            # Due to missing data, etc., some functions occasionally fail. However, we don't want this to crash
+            # the generation of the remaining part of the report, so catch and report any exception here
+            if DEBUG:
+                f(dir, data)
+            else:
+                try:
+                    # Compute data
+                    f(dir, data)
+                except Exception as e:
+                    # Log this error, so it can be displayed in the HTML report
+                    data['errors'].append( str(e) )
+                    # Log to an error log file as well
+                    with open(dir + 'log.txt','a') as f:
+                        f.write(traceback.format_exc() + '\n\n')
+
+        # Write template
+        with open(outFile, 'w') as fo:
+            fo.write(template.render(data).replace(u'\ufeff',u''))
+    except Exception as e:
+        print(e)
     
 # ========================================================
 # Entry point
 # ========================================================
 
-def run(async=False):
-    # Get all raw data files in data directory
-    files = [x for x in os.listdir('./') if x.endswith('.msgpack')]
-        
-    # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime('./'+x))
-
+def run(async=False, settings=None):
     if SINGLEFILE != "":
         processFile(SINGLEFILE)
     else:
-        if DEBUG:
-            for file in files:
-                # Process only recent files
-                if '2016-12-14' in file:
-                    processFile(file)
+        if settings is None:
+            settings = util.askForExtractionSettings(
+                allRecentFilesIfNoneSelected=True)
+
+        if SYNCHRONOUS or len(settings.files) == 1:
+            for file in settings.files:
+                processFile(file)
         else:
             with multiprocessing.Pool(processes=12) as pool:
-                (pool.map_async if async else pool.map)(processFile, files)
+                (pool.map_async if async else pool.map)(processFile, settings.files)
                 return pool
     
     return None
     
 if __name__ == "__main__":
+
     run()
