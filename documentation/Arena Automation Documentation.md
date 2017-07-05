@@ -153,10 +153,81 @@ for the wand, which would increase calibration errors.
 1. If we are gathering real fly trajectories, or otherwise need accurate Photron 3D reconstruction, we need to
   calibrate the Photron cameras as well.
 
-
   2. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
 
-  2.
+  2. Press the record button. A window pops up. Select (and create, if it doesn't already exist) a new directory for
+    this day's recordings. This directory should be in the same directory as the other Photron recording directories,
+    in order for the automatic analysis scripts to find the files. Be sure to un-select "Info Save". Relevant
+    settings are illustrated below:
+
+    ![](images/photron_record.png)
+
+  2. The "record" button will switch to "trigger in".
+
+    ![](images/photron_trigger_in.png)
+
+  2. Click it again. The button will display "recording" to indicate that frames are being recorded. After ~1 second, press
+    "Recording Done" to stop the recording
+
+    ![](images/photron_recording.png)
+
+  2. Switch to the "Data Save" tab, reduce the range of frames to e.g. 100, and save the file as e.g. "lframe_N.avi".
+
+    ![](images/photron_datasave_lframe.png)
+
+  2. Now remove the L-frame from the arena. Put the wand back in the arena --- the one we used to calibrate Cortex. As before,
+    make sure the minimum marker size and thresholds are set correctly.
+
+  2. Now ensure that Photron is in "Start Trigger" mode:
+
+    ![](images/photron_trigger_start.png)
+
+  2. Now click "Record." Once again, Photron will wait for a trigger signal:
+
+    ![](images/photron_trigger_in.png)
+
+  2. Now type the filename for the recorded data in cortex. After typing the name, be sure to press enter to
+    finalize this name.
+
+    ![](images/cortex_wanding_name.png)
+
+  2. Now configure the recording settings, which are specific to this wanding recording:
+
+    ![](images/cortex_wanding_settings.png)
+
+  2. Now open the arduino program.
+
+    ![](images/arduino_launch_icon.png)
+
+  2. Then select the right serial port (currently "COM 4"):
+
+    ![](images/arduino_com_port_4.png)
+
+  2. Now open the Serial Monitor:
+
+    ![](images/arduino_serial_monitor.png)
+
+  2. If this is the right COM port, an "h" command should identify the device as the "Teensy TTL Controller":
+
+    ![](images/arduino_com4_h.png)
+
+  2. Copy the "Wand200.mars" markerset file into the current Cortex directory, i.e. the one we created earlier, and
+    in which our current setup file is saved. The "Wand200.mars" file can be found by searching for Wand200.mars in the
+    "MoCap raw" directory.
+
+  2. Load the "Wand200" markerset into Cortex:
+
+    ![](images/cortex_wand_markerset.png)
+
+  2. Now both Cortex and Photron are armed and listening for triggers, and the wand is in the center of the camera volume,
+    and is correctly recognized by Cortex.
+
+  2. Send a "t" command in the Serial Monitor window. This will trigger the start of both Cortex and Photron recordings.
+
+  2. Wave the wand in the same pattern as we used to calibrate the Cortex volume. 40-60 seconds of recording should be  sufficient.
+
+  2. Manually end both recordings by clicking the red recording button in Cortex, and clicking "recording done" in
+    Photron.
 
 ##### General setup, continued
 
