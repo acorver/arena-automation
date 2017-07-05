@@ -47,48 +47,147 @@ shall be referred to as the
     * Test backpack
 
 ## Practical step-by-step guide
-**Step 1**: Launch the *Arena Automation Web Interface*
 
-Click the following icon on the Photron PC:
-![Starting The Web Interface](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_interface_launch_icon.png)
+##### General setup
 
-This will bring up a command window that will stay open,
-and can be minimized to the background:
-![The web interface command window](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_interface_launch_cmdwindow.png)
+1. Launch the *Arena Automation Web Interface*
 
-Now open a browser (still on the Photron PC), and navigate
-to "http://localhost." (Note that depending on the network
-configuration, this same web interface can be viewed
-on other computers using the Photron PC's IP address.)
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_log.png)
+1. Click the following icon on the Photron PC:
 
-Now click on "Power" in the side menu, which opens the following page:
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_power.png)
+  ![Starting The Web Interface](images/arena_interface_launch_icon.png)
 
-Click both buttons to power on the motion capture cameras,
-the Photrons, the FlySim motors, and the Telemetry --- assuming all these are connected and the power relays are
-not manually turned off. The sysem will indicate when
-the power is on:
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_power_on.png)
+  This will bring up a command window that will stay open,
+  and can be minimized to the background:
 
-Now start the *Arena Automation System* software on the Photron PC:
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_launch_icon.png)
+  ![The web interface command window](images/arena_interface_launch_cmdwindow.png)
 
-This also brings up a command line window that can be minimized:
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_launch_cmdwindow.png)
+1. Now open a browser (still on the Photron PC), and navigate
+  to "http://localhost." (Note that depending on the network
+  configuration, this same web interface can be viewed
+  on other computers using the Photron PC's IP address.)
 
-Now go back to the browser, and navigate to the "Log" page
-in the web interface. This page opens by default when you
-navigate to "localhost." This page will now display log
-information:
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_log_running.png)
+  ![](images/arena_automation_web_interface_log.png)
 
-We can now navigate to the FlySim interface to send commands to FlySim:
-![](https://github.com/acorver/arena-automation/blob/dev/documentation/images/arena_automation_web_interface_flysim.png)
+1. Now click on "Power" in the side menu, which opens the following page:
+
+  ![](images/arena_automation_web_interface_power.png)
+
+1. Click both buttons to power on the motion capture cameras,
+  the Photrons, the FlySim motors, and the Telemetry --- assuming all these are connected and the power relays are
+  not manually turned off. The sysem will indicate when
+  the power is on:
+
+  ![](images/arena_automation_web_interface_power_on.png)
+
+##### Cortex setup
+
+1. Wait ~20 seconds to ensure all cameras have started. Then, on the Cortex PC, start Cortex 3.6.
+
+  ![](images/cortex_start_menu_item.png)
+
+1. Upon startup, Cortex will load the most recently used configurations. In order not to overwrite the previous calibration settings, data, etc., we re-save the setup configuration in a new directory:
+
+  ![](images/cortex_save_setup_as.png)
+
+1. As data files will be saved to the same folder as the setup file (\*.cal), we save each setup file to a new
+  directory. For consistency, and to ensure automatic analysis scripts work, this directory should be created
+  in the same "MoCap raw" directory as the other recordings. The convention is to name the directory
+  according to the "yymmdd" (year-year-month-month-day-day) format, although this is not technically required.
+
+  For consistency, we name the _\*.cap_ file according to the "yymmdd_precal.cap" format, to indicate the settings
+  are "pre-calibration" (i.e. copied from the previous recording).
+
+1. Connect to the cameras, then click "All On."
+
+  ![](images/cortex_connect_to_cameras.png)
+
+1. Turn off the arena humidifier. It will increase calibration errors. We will turn it on again after calibration.
+
+1. Place the calibration wand in the middle of the arena.
+
+1. Place small pieces of black cloth over the perches and LED Sync box, to ensure none of their markers are confused
+for the wand, which would increase calibration errors.
+
+1. Adjust the minimum marker size to 21:
+
+  ![](images/cortex_minimum_marker_size.png)
+
+1. Adjust thresholds on each camera to ensure only the 3 wand markers are seen. Make sure all (enabled) cameras
+  will see at least some valid 3-marker frames, or otherwise the calibration will fail (diverge).
+
+1. Calibrate. Be sure to cover the entire camera volume during wanding. In addition, it is a good idea to split your
+  wanding procedure into three subroutines, each aligned to one of the orthogonal axes. This minimizes the colinearity
+  of wand measurements, and maximizes the 3D calibration accuracy.
+
+1. After calibration, save the current setup as "yymmdd_cal1.cap" in the same directory. For future calibrations
+  throughout the day, continue the "yymmdd_calN.cap" format, where N is increased every time.
+
+##### Photron setup
+
+1. On the Photron PC, start PFV:
+
+  ![](images/photron_launch_icon.png)
+
+1. PFV will automatically detect the connected cameras. On occasion, not all cameras are connected. If this happens
+  after long use, one might have overheated and stopped responding. The solution is to have it cool down, or otherwise
+  fixed if the problem persists. More frequently, however, this problem can be solved by simply repeatedly
+  searching for the cameras, and ensuring they have had long enough to start up after power was turned on:
+
+  ![](images/photron_reopen_cameras.png)
+
+1. Photron receives its sync signal from the signal generator. The signal generator produces two frequencies: One
+    for the Photron cameras, and one of the MAC/Mocap cameras. Be sure these frequencies are set correctly.
+
+1. We now tell the Photrons to listen to this external clock:
+
+  ![](images/photron_camera_options_button.png)
+
+  Then select "TRIG POS" for "TRIG TTL IN," and "ON OTHERS POS" for "SYNC IN."
+
+  ![](images/photron_camera_options.png)
+
+1. Set the correct shutter value, e.g. 1000 Hz:
+
+  ![](images/photron_shutter.png)
+
+1. If we are gathering real fly trajectories, or otherwise need accurate Photron 3D reconstruction, we need to
+  calibrate the Photron cameras as well.
+
+
+  2. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
+
+  2.
+
+##### General setup, continued
+
+1. Now turn on the humidifier again, and remove all black pieces of cloth.
+
+1. Now place the test yframe in the camera volume, and set the minimum marker size to 1.
+
+1. Most likely, the thresholds will have to be tuned to prevent false marker detection.
+
+1. Now start the *Arena Automation System* software on the Photron PC:
+
+  ![](images/arena_automation_launch_icon.png)
+
+  This also brings up a command line window that can be minimized:
+
+  ![](images/arena_automation_launch_cmdwindow.png)
+
+1. Now go back to the browser, and navigate to the "Log" page
+  in the web interface. This page opens by default when you
+  navigate to "localhost." This page will now display log
+  information:
+
+  ![](images/arena_automation_web_interface_log_running.png)
+
+1. We can now navigate to the FlySim interface to send commands to FlySim:
+
+  ![](images/arena_automation_web_interface_flysim.png)
 
 ...
 
-To turn the system off at night, log into the Photron PC remotely using TeamViewer:
+1. To turn the system off at night, log into the Photron PC remotely using TeamViewer:
 
 ...
 
