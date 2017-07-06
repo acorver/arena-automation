@@ -15,36 +15,36 @@ shall be referred to as the
 ## Table of Contents
 * Practical step-by-step guide
 * Technical documentation:
-  * High-level overview
-  * Overview of the technology stack
-  * Device Diagram
-  * Installation and repository structure
-  * A note on code editors
-  * Real-time software
-    * ...
-  * Real-time hardware:
-    * Trigger Signal Generator
-    * LED Trigger Signal Generator
-    * FlySim Controller
-      * FlySim Z Controller
-      * Kangaroo Controller
-    * Remote-controllable power switches
-  * Software post-processing:
-    * Overview of the processing pipeline
-    * A note on data formats
-    * FlySim extraction
-    * Takeoff trajectory extraction
-    * Telemetry extraction
-  * Unfinished work-in-progress
-    * Interfacing with Photrons
-    * CableFlysim
-    * Rotating stage
-    * Networked sign
-    *
-  * Miscellaneous tools
-    * Auto-wand tracking
-    * Arena Telemetry Assessment
-    * Test backpack
+    * High-level overview
+    * Overview of the technology stack
+    * Device Diagram
+    * Installation and repository structure
+    * A note on code editors
+    * Real-time software
+        * ...
+    * Real-time hardware:
+        * Trigger Signal Generator
+        * LED Trigger Signal Generator
+        * FlySim Controller
+            * FlySim Z Controller
+            * Kangaroo Controller
+        * Remote-controllable power switches
+    * Software post-processing:
+        * Overview of the processing pipeline
+        * A note on data formats
+        * FlySim extraction
+        * Takeoff trajectory extraction
+        * Telemetry extraction
+    * Unfinished work-in-progress
+        * Interfacing with Photrons
+        * CableFlysim
+        * Rotating stage
+        * Networked sign
+        *
+    * Miscellaneous tools
+        * Auto-wand tracking
+        * Arena Telemetry Assessment
+        * Test backpack
 
 ## Practical step-by-step guide
 
@@ -54,52 +54,52 @@ shall be referred to as the
 
 1. Click the following icon on the Photron PC:
 
-  ![Starting The Web Interface](images/arena_interface_launch_icon.png)
+    ![](images/arena_interface_launch_icon.png)
 
-  This will bring up a command window that will stay open,
-  and can be minimized to the background:
+    This will bring up a command window that will stay open,
+    and can be minimized to the background:
 
-  ![The web interface command window](images/arena_interface_launch_cmdwindow.png)
+    ![](images/arena_interface_launch_cmdwindow.png)
 
 1. Now open a browser (still on the Photron PC), and navigate
-  to "http://localhost." (Note that depending on the network
-  configuration, this same web interface can be viewed
-  on other computers using the Photron PC's IP address.)
+    to "http://localhost." (Note that depending on the network
+    configuration, this same web interface can be viewed
+    on other computers using the Photron PC's IP address.)
 
-  ![](images/arena_automation_web_interface_log.png)
+    ![](images/arena_automation_web_interface_log.png)
 
 1. Now click on "Power" in the side menu, which opens the following page:
 
-  ![](images/arena_automation_web_interface_power.png)
+    ![](images/arena_automation_web_interface_power.png)
 
 1. Click both buttons to power on the motion capture cameras,
-  the Photrons, the FlySim motors, and the Telemetry --- assuming all these are connected and the power relays are
-  not manually turned off. The sysem will indicate when
-  the power is on:
+    the Photrons, the FlySim motors, and the Telemetry --- assuming all these are connected and the power relays are
+    not manually turned off. The sysem will indicate when
+    the power is on:
 
-  ![](images/arena_automation_web_interface_power_on.png)
+    ![](images/arena_automation_web_interface_power_on.png)
 
 ##### Cortex setup
 
 1. Wait ~20 seconds to ensure all cameras have started. Then, on the Cortex PC, start Cortex 3.6.
 
-  ![](images/cortex_start_menu_item.png)
+    ![](images/cortex_start_menu_item.png)
 
 1. Upon startup, Cortex will load the most recently used configurations. In order not to overwrite the previous calibration settings, data, etc., we re-save the setup configuration in a new directory:
 
-  ![](images/cortex_save_setup_as.png)
+    ![](images/cortex_save_setup_as.png)
 
 1. As data files will be saved to the same folder as the setup file (\*.cal), we save each setup file to a new
-  directory. For consistency, and to ensure automatic analysis scripts work, this directory should be created
-  in the same "MoCap raw" directory as the other recordings. The convention is to name the directory
-  according to the "yymmdd" (year-year-month-month-day-day) format, although this is not technically required.
+    directory. For consistency, and to ensure automatic analysis scripts work, this directory should be created
+    in the same "MoCap raw" directory as the other recordings. The convention is to name the directory
+    according to the "yymmdd" (year-year-month-month-day-day) format, although this is not technically required.
 
-  For consistency, we name the _\*.cap_ file according to the "yymmdd_precal.cap" format, to indicate the settings
-  are "pre-calibration" (i.e. copied from the previous recording).
+    For consistency, we name the _\*.cap_ file according to the "yymmdd_precal.cap" format, to indicate the settings
+    are "pre-calibration" (i.e. copied from the previous recording).
 
 1. Connect to the cameras, then click "All On."
 
-  ![](images/cortex_connect_to_cameras.png)
+    ![](images/cortex_connect_to_cameras.png)
 
 1. Turn off the arena humidifier. It will increase calibration errors. We will turn it on again after calibration.
 
@@ -110,124 +110,124 @@ for the wand, which would increase calibration errors.
 
 1. Adjust the minimum marker size to 21:
 
-  ![](images/cortex_minimum_marker_size.png)
+    ![](images/cortex_minimum_marker_size.png)
 
 1. Adjust thresholds on each camera to ensure only the 3 wand markers are seen. Make sure all (enabled) cameras
-  will see at least some valid 3-marker frames, or otherwise the calibration will fail (diverge).
+    will see at least some valid 3-marker frames, or otherwise the calibration will fail (diverge).
 
 1. Calibrate. Be sure to cover the entire camera volume during wanding. In addition, it is a good idea to split your
-  wanding procedure into three subroutines, each aligned to one of the orthogonal axes. This minimizes the colinearity
-  of wand measurements, and maximizes the 3D calibration accuracy.
+    wanding procedure into three subroutines, each aligned to one of the orthogonal axes. This minimizes the colinearity
+    of wand measurements, and maximizes the 3D calibration accuracy.
 
 1. After calibration, save the current setup as "yymmdd_cal1.cap" in the same directory. For future calibrations
-  throughout the day, continue the "yymmdd_calN.cap" format, where N is increased every time.
+    throughout the day, continue the "yymmdd_calN.cap" format, where N is increased every time.
 
 ##### Photron setup
 
 1. On the Photron PC, start PFV:
 
-  ![](images/photron_launch_icon.png)
+    ![](images/photron_launch_icon.png)
 
 1. PFV will automatically detect the connected cameras. On occasion, not all cameras are connected. If this happens
-  after long use, one might have overheated and stopped responding. The solution is to have it cool down, or otherwise
-  fixed if the problem persists. More frequently, however, this problem can be solved by simply repeatedly
-  searching for the cameras, and ensuring they have had long enough to start up after power was turned on:
+    after long use, one might have overheated and stopped responding. The solution is to have it cool down, or otherwise
+    fixed if the problem persists. More frequently, however, this problem can be solved by simply repeatedly
+    searching for the cameras, and ensuring they have had long enough to start up after power was turned on:
 
-  ![](images/photron_reopen_cameras.png)
+    ![](images/photron_reopen_cameras.png)
 
 1. Photron receives its sync signal from the signal generator. The signal generator produces two frequencies: One
-    for the Photron cameras, and one of the MAC/Mocap cameras. Be sure these frequencies are set correctly.
+        for the Photron cameras, and one of the MAC/Mocap cameras. Be sure these frequencies are set correctly.
 
 1. We now tell the Photrons to listen to this external clock:
 
-  ![](images/photron_camera_options_button.png)
+    ![](images/photron_camera_options_button.png)
 
-  Then select "TRIG POS" for "TRIG TTL IN," and "ON OTHERS POS" for "SYNC IN."
+    Then select "TRIG POS" for "TRIG TTL IN," and "ON OTHERS POS" for "SYNC IN."
 
-  ![](images/photron_camera_options.png)
+    ![](images/photron_camera_options.png)
 
 1. Set the correct shutter value, e.g. 1000 Hz:
 
-  ![](images/photron_shutter.png)
+    ![](images/photron_shutter.png)
 
 1. If we are gathering real fly trajectories, or otherwise need accurate Photron 3D reconstruction, we need to
-  calibrate the Photron cameras as well.
+    calibrate the Photron cameras as well.
 
-  2. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
+    2. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
 
-  2. Press the record button. A window pops up. Select (and create, if it doesn't already exist) a new directory for
-    this day's recordings. This directory should be in the same directory as the other Photron recording directories,
-    in order for the automatic analysis scripts to find the files. Be sure to un-select "Info Save". Relevant
-    settings are illustrated below:
+    2. Press the record button. A window pops up. Select (and create, if it doesn't already exist) a new directory for
+        this day's recordings. This directory should be in the same directory as the other Photron recording directories,
+        in order for the automatic analysis scripts to find the files. Be sure to un-select "Info Save". Relevant
+        settings are illustrated below:
 
-    ![](images/photron_record.png)
+        ![](images/photron_record.png)
 
-  2. The "record" button will switch to "trigger in".
+    2. The "record" button will switch to "trigger in".
 
-    ![](images/photron_trigger_in.png)
+        ![](images/photron_trigger_in.png)
 
-  2. Click it again. The button will display "recording" to indicate that frames are being recorded. After ~1 second, press
-    "Recording Done" to stop the recording
+    2. Click it again. The button will display "recording" to indicate that frames are being recorded. After ~1 second, press
+        "Recording Done" to stop the recording
 
-    ![](images/photron_recording.png)
+        ![](images/photron_recording.png)
 
-  2. Switch to the "Data Save" tab, reduce the range of frames to e.g. 100, and save the file as e.g. "lframe_N.avi".
+    2. Switch to the "Data Save" tab, reduce the range of frames to e.g. 100, and save the file as e.g. "lframe_N.avi".
 
-    ![](images/photron_datasave_lframe.png)
+        ![](images/photron_datasave_lframe.png)
 
-  2. Now remove the L-frame from the arena. Put the wand back in the arena --- the one we used to calibrate Cortex. As before,
-    make sure the minimum marker size and thresholds are set correctly.
+    2. Now remove the L-frame from the arena. Put the wand back in the arena --- the one we used to calibrate Cortex. As before,
+        make sure the minimum marker size and thresholds are set correctly.
 
-  2. Now ensure that Photron is in "Start Trigger" mode:
+    2. Now ensure that Photron is in "Start Trigger" mode:
 
-    ![](images/photron_trigger_start.png)
+        ![](images/photron_trigger_start.png)
 
-  2. Now click "Record." Once again, Photron will wait for a trigger signal:
+    2. Now click "Record." Once again, Photron will wait for a trigger signal:
 
-    ![](images/photron_trigger_in.png)
+        ![](images/photron_trigger_in.png)
 
-  2. Now type the filename for the recorded data in cortex. After typing the name, be sure to press enter to
-    finalize this name.
+    2. Now type the filename for the recorded data in cortex. After typing the name, be sure to press enter to
+        finalize this name.
 
-    ![](images/cortex_wanding_name.png)
+        ![](images/cortex_wanding_name.png)
 
-  2. Now configure the recording settings, which are specific to this wanding recording:
+    2. Now configure the recording settings, which are specific to this wanding recording:
 
-    ![](images/cortex_wanding_settings.png)
+        ![](images/cortex_wanding_settings.png)
 
-  2. Now open the arduino program.
+    2. Now open the arduino program.
 
-    ![](images/arduino_launch_icon.png)
+        ![](images/arduino_launch_icon.png)
 
-  2. Then select the right serial port (currently "COM 4"):
+    2. Then select the right serial port (currently "COM 4"):
 
-    ![](images/arduino_com_port_4.png)
+        ![](images/arduino_com_port_4.png)
 
-  2. Now open the Serial Monitor:
+    2. Now open the Serial Monitor:
 
-    ![](images/arduino_serial_monitor.png)
+        ![](images/arduino_serial_monitor.png)
 
-  2. If this is the right COM port, an "h" command should identify the device as the "Teensy TTL Controller":
+    2. If this is the right COM port, an "h" command should identify the device as the "Teensy TTL Controller":
 
-    ![](images/arduino_com4_h.png)
+        ![](images/arduino_com4_h.png)
 
-  2. Copy the "Wand200.mars" markerset file into the current Cortex directory, i.e. the one we created earlier, and
-    in which our current setup file is saved. The "Wand200.mars" file can be found by searching for Wand200.mars in the
-    "MoCap raw" directory.
+    2. Copy the "Wand200.mars" markerset file into the current Cortex directory, i.e. the one we created earlier, and
+        in which our current setup file is saved. The "Wand200.mars" file can be found by searching for Wand200.mars in the
+        "MoCap raw" directory.
 
-  2. Load the "Wand200" markerset into Cortex:
+    2. Load the "Wand200" markerset into Cortex:
 
-    ![](images/cortex_wand_markerset.png)
+        ![](images/cortex_wand_markerset.png)
 
-  2. Now both Cortex and Photron are armed and listening for triggers, and the wand is in the center of the camera volume,
-    and is correctly recognized by Cortex.
+    2. Now both Cortex and Photron are armed and listening for triggers, and the wand is in the center of the camera volume,
+        and is correctly recognized by Cortex.
 
-  2. Send a "t" command in the Serial Monitor window. This will trigger the start of both Cortex and Photron recordings.
+    2. Send a "t" command in the Serial Monitor window. This will trigger the start of both Cortex and Photron recordings.
 
-  2. Wave the wand in the same pattern as we used to calibrate the Cortex volume. 40-60 seconds of recording should be  sufficient.
+    2. Wave the wand in the same pattern as we used to calibrate the Cortex volume. 40-60 seconds of recording should be    sufficient.
 
-  2. Manually end both recordings by clicking the red recording button in Cortex, and clicking "recording done" in
-    Photron.
+    2. Manually end both recordings by clicking the red recording button in Cortex, and clicking "recording done" in
+        Photron.
 
 ##### General setup, continued
 
@@ -239,22 +239,22 @@ for the wand, which would increase calibration errors.
 
 1. Now start the *Arena Automation System* software on the Photron PC:
 
-  ![](images/arena_automation_launch_icon.png)
+    ![](images/arena_automation_launch_icon.png)
 
-  This also brings up a command line window that can be minimized:
+    This also brings up a command line window that can be minimized:
 
-  ![](images/arena_automation_launch_cmdwindow.png)
+    ![](images/arena_automation_launch_cmdwindow.png)
 
 1. Now go back to the browser, and navigate to the "Log" page
-  in the web interface. This page opens by default when you
-  navigate to "localhost." This page will now display log
-  information:
+    in the web interface. This page opens by default when you
+    navigate to "localhost." This page will now display log
+    information:
 
-  ![](images/arena_automation_web_interface_log_running.png)
+    ![](images/arena_automation_web_interface_log_running.png)
 
 1. We can now navigate to the FlySim interface to send commands to FlySim:
 
-  ![](images/arena_automation_web_interface_flysim.png)
+    ![](images/arena_automation_web_interface_flysim.png)
 
 ...
 
@@ -335,11 +335,11 @@ The offline pipeline consists of many scripts (written in
 Python) that each extract a particular type of information
 from the raw recordings. Here is an overview:
 
-| Tables        | Are           | Cool  |
+| Tables                | Are                     | Cool    |
 | ------------- |:-------------:| -----:|
-| col 3 is      | right-aligned | $1600 |
-| col 2 is      | centered      |   $12 |
-| zebra stripes | are neat      |    $1 |
+| col 3 is            | right-aligned | $1600 |
+| col 2 is            | centered            |     $12 |
+| zebra stripes | are neat            |        $1 |
 
 Each of these scripts can be run independently,
 facilitating easier experimentation with new
