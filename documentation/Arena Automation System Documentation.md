@@ -1,5 +1,5 @@
 
-# Arena Automation System
+#\. Arena Automation System
 This guide documents the use of the suite of
 hardware and software tools that collectively
 facilitate the automatic, unsupervised recording
@@ -8,13 +8,21 @@ recording sessions. This collection of interrelated tools
 shall be referred to as the
 *Arena Automation System,* or **AAS**.
 
-## Authors:
-* Abel Corver, abel.corver@gmail.com
-(Last contribution: June 2017)
+For more information about how to update this documentation, read the
+["About the documentation"](#About_the_documentation) section.
 
-## Table of Contents
+-------------- ---------------------------------------------------------
+ **Authors**   
+-------------- ---------------------------------------------------------
+ Abel Corver     abel.corver [at] gmail [dot] com \           
+                 _Last contribution:_ June 2017                       
+-------------- ---------------------------------------------------------
+
+<!--
+##\. Table of Contents
 * Practical step-by-step guide
 * Technical documentation:
+    * About the documentation
     * High-level overview
     * Overview of the technology stack
     * Device Diagram
@@ -45,10 +53,11 @@ shall be referred to as the
         * Auto-wand tracking
         * Arena Telemetry Assessment
         * Test backpack
+-->
 
-## Practical step-by-step guide
+##\. Practical step-by-step guide
 
-##### General setup
+###\. General setup
 
 1. Launch the *Arena Automation Web Interface*
 
@@ -79,7 +88,7 @@ shall be referred to as the
 
     ![](images/arena_automation_web_interface_power_on.png)
 
-##### Cortex setup
+###\. Cortex setup
 
 1. Wait ~20 seconds to ensure all cameras have started. Then, on the Cortex PC, start Cortex 3.6.
 
@@ -122,7 +131,7 @@ for the wand, which would increase calibration errors.
 1. After calibration, save the current setup as "yymmdd_cal1.cap" in the same directory. For future calibrations
     throughout the day, continue the "yymmdd_calN.cap" format, where N is increased every time.
 
-##### Photron setup
+###\. Photron setup
 
 1. On the Photron PC, start PFV:
 
@@ -153,7 +162,7 @@ for the wand, which would increase calibration errors.
 1. If we are gathering real fly trajectories, or otherwise need accurate Photron 3D reconstruction, we need to
     calibrate the Photron cameras as well.
 
-    2. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
+    1. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
 
     2. Press the record button. A window pops up. Select (and create, if it doesn't already exist) a new directory for
         this day's recordings. This directory should be in the same directory as the other Photron recording directories,
@@ -229,7 +238,9 @@ for the wand, which would increase calibration errors.
     2. Manually end both recordings by clicking the red recording button in Cortex, and clicking "recording done" in
         Photron.
 
-##### General setup, continued
+1. We are now ready to arm Photron for recording. Make sure that
+
+###\. General setup, continued
 
 1. Now turn on the humidifier again, and remove all black pieces of cloth.
 
@@ -256,19 +267,162 @@ for the wand, which would increase calibration errors.
 
     ![](images/arena_automation_web_interface_flysim.png)
 
-...
+1. The experiment will now run itself! Although the system is automated, it is good practice
+    to check in on the system every 2 hours. This can be done remotely, minimizing the time this takes.
+    Among the relatively rare system failures, common failure modes include (i) a Cortex crash,
+    (ii) rare but occasional crashes in the core ArenaAutomation.exe process, and (iii) FlySim
+    crashes. Crashes of either Cortex or the main ArenaAutomation.exe process will be obvious,
+    indicated by the faded window and likely a Windows error dialog. A failure to present flysim trials,
+    e.g. due to some occasional motor failure, will be indicated in the log window.
 
-1. To turn the system off at night, log into the Photron PC remotely using TeamViewer:
+1. To turn the system off at night, log into the Photron PC remotely using TeamViewer, navigate to
+    the power web interface as illustrated above, and click the buttons to turn off the relays. Be sure
+    to actually close the ArenaAutomation.exe console window, to ensure that the data files are
+    no longer being written to.
 
-...
+###\. post-processing
 
-## Technical documentation
-### High-level overview
+####\. Automatic post-processing
+
+1. To commence post-processing, ...
+
+####\. Manual post-processing of Photron 3D calibration and real prey-capture
+
+1. To keep all key data and analysis files in a single directory, it is good practice to copy the
+  *wanding_N.avi* (Photron) and *wanding_N.trc* (Cortex) files in the same output directory as the
+  *.msgpack* files, which is where all other analysis files will be produced.
+
+1. Start the "wand-tracker.bat" program.
+
+1. Select each of the *wanding_N.avi* video files, one in each file dialog that appears. Once you've
+    selected all files, click "cancel" in the next file dialog that appears. This signals to the Wand Tracker
+    program to stop asking for video files.
+
+1. Then click through the question dialogs that appear.
+
+1. Wait for the program to digitize the wand data. You can visually monitor the performance of the wand tracker,
+    both in real-time (if this option was selected), and post-hoc, using the *_postprocessed.avi* and *_tracked.avi*
+    video files. Note that occasionally some points are mis-recognized. In theory this can be corrected manually
+    by opening up the output of the digitization in the DLTdv program. However, in practice, this is not necessary,
+    as we will remove outliers and then re-run the calibration below.
+
+1. The wand tracking program will now have created a few *.csv* files, most importantly *wanding.xypts.csv*.
+
+1. Now open Matlab (2014a or older)
+
+1. Run the command "easyWand2b"
+
+1. Set the "Wand span" to 0.2 (in meters)
+
+1. Load an axis file. The axis is arbitrary, as we will run additional    transformations soon that will align the axis and coordinate system to Cortex. We can therefore use the same axis file each time. The file *axis_xypts_for_easywand.csv* has been created for this purpose.
+
+1. Load the wand points.
+
+    ![](images/easywand2b_start.png)
+
+1. Click "Compute calibration". This will take a while.
+
+1. When asked whether the axis origin needs to be optimized, select "no." After the calibration finishes, click "Save results." Navigate to the same directory as all the other files for this day, and save the file under the name "wanding." This will save the DLT coefficients in "wanding_dltCoefs.csv".
+
+    Note that the Matlab output window likely reported a very high calibration error. This is due to the imperfect automatic tracking of the wand.
+
+1. Now exit the EasyWand window. Type "DLTdv5" in the Matlab window.
+
+1. When asked how many cameras to process, select the correct number. Then select each camera wanding video file when prompted. *Be sure, for consistency and to prevent errors later, to select the appropriate file when asked  to "Pick movie file {N}"*. For example, select  *wanding\_\_C001H001S0001.avi* when asked for movie file 1, and *wanding\_\_C002H001S0001.avi* when asked for movie file 2.
+
+    ![](images/dltdv5_init.png)
+
+1. When asked if these cameras are calibrated via DLT, choose "yes." Then select the *wanding\_dltCoefs.csv* file we just generated using easyWand2b.
+
+1. Now click "Load Data," and select the "*wanding.xypts.csv*" file generated by the automatic wand digitizing software earlier.
+
+    ![](images/dltdv5_loadxy.png)
+
+1. Then click anywhere on one of the movie windows, and subsequently press
+SHIFT-R. You should see the message "Recomputing all 3D coordinates" in the main Matlab console window.
+
+    ![](images/dltdv5_3d.png)
+
+1. Click "Save Data" and select the same folder as the original. In the subsequent "Data File Prefix" window, select the same file prefix as the input file, i.e. the prefix "*wanding.*". This will keep the original 2D data the same, but compute 3D residuals. When asked to overwrite existing data, select "Yes."
+
+1. When asked to create 95% CI's, select "No."
+
+1. Click "Quit" to exit DLTdv5
+
+1. Now run "remove-easywand-outliers.bat". (Or execute the "remove-easywand-outliers.py" manually from the command line.)
+
+1. In the file dialog that appears, select the XY wanding coordinate file we just (re-)saved, "*wanding.xypts.csv*".
+
+1. This will create the file "*wanding.no_outliers.xypts.csv*", which contains the subset of XY(Z) markers with relatively low residuals.
+
+1. Go back to Matlab, and (again) run "easyWand2b". We now repeat the steps we did before: Load the same axis file as before, change the wand span to "0.2". However, for wand points we now select the low-residual subset we just created, "*wanding.no_outliers.xypts.csv*".
+
+1. Again click "Compute calibration." This will again take a while.
+
+1. Again select "No" when asked whether to optimize the axis origin.
+
+1. Notice that the wanding residuals have now drastically reduced:
+
+    ![](images/easywand2b_no_outliers.png)
+
+1. Again click "Save results." When asked for a filename, type "wanding". This will again create a "*wanding_dltCoefs.csv*" file. Then close easyWand2b as before.
+
+1. Again, type "DLTdv5" in the Matlab command prompt.
+
+1. In the window that appears, again click "Initialize", and select the videos as before (in the right order).
+
+1. When asked if the cameras are calibrated via DLT, again select "Yes."
+
+1. Select the (now updated) "*wanding_dltCoefs.csv*" file.
+
+1. Again click "Load Data" and select the "*wanding.xypts.csv*" file. (Note: Don't select the "*wanding.no_outliers.xypts.csv*" file!)
+
+1. Again, bring focus to one of the video windows by clicking on
+e.g. their title bar. Then press SHIFT-R to recompute XYZ coordinates.
+
+1. Press "Save Data," and select the same folder our current files live in.
+
+1. As before, select the file prefix "*wanding.*". Again, when prompted, indicate it is ok to overwrite files.
+
+1. You will be asked if 95% confidence intervals should be computed. Again, this is not necessary for any of our analyses.
+
+1. Quit the DLTdv5 program.
+
+1. Before we continue, ensure that the Cortex .TRC wanding file has been copied to the same data directory we've been working in so far.
+
+1. Now run "calibrate-photron.bat". (Or execute the "calibrate-photron.py" manually from the command line.)
+
+1. When prompted, select the "*wanding.xyzpts.csv*" file we just created.
+
+1. When prompted, select the "*wanding_N.trc*" we just copied to this directory.
+
+1. When this script finishes, it will have produced a "*3dcalibration_dlt_adjustment.pickle*" file. This file contains linear regressions aligning any DLTdv5-generated XYZ coordinates with the Cortex coordinate system.
+
+    In addition, the script will have produced various debugging plots in the "debug/3dcalibration/" subfolder.
+
+    ![](images/calibration3d_debug_folder.png)
+
+    ![](images/photron_wanding_errors.png)
+
+    ![](images/photron_wanding_frameshift.png)
+
+    ![](images/calibration3d_debug_3d.png)
+
+    Although the standard deviation of the calibration appears high, on the order of 2 mm, this is accounted for by errors in detecting the true center of the wand markers in the Photron cameras. The actual calibration accuracy could be confirmed by manually annotating a 3D wand trajectory in DLTdv5, transforming it with the same calibration file, and comparing it to Cortex. Or by manually annotating smaller markers, such as the dragonfly Yframe, in addition to the real prey. Reconstructing the Yframe will give a good measure of actual cross-camera calibration accuracy.
+
+1. TODO
+
+##\. Technical documentation
+###\. About the documentation
+The documentation is written in Pandoc-flavored Markdown. A good reference on this flavor
+of Markdown can be found **[here](http://rmarkdown.rstudio.com/authoring_pandoc_markdown.html)**.
+
+###\. High-level overview
 The _Arena Automation System_ consists of roughly two
 components. A real-time pipeline, and an offline post-processing
 pipeline. The real-time system has three main goals:
 
-#### The realtime pipeline
+####\. The realtime pipeline
 * **Goal 1: Save all motion capture data**.
 
 The real-time system
@@ -325,7 +479,7 @@ oriented.
 Other real-time monitoring functions can be added
 easily.
 
-#### The offline pipeline
+####\. The offline pipeline
 
 The goal of the offline pipeline is to extract all
 dragonfly activity, especially prey-capture flights,
@@ -378,13 +532,13 @@ particular interest:
 
 ...
 
-### Hardware Subsystems
+###\. Hardware Subsystems
 
-### Software processing
+###\. Software processing
 This section details the various scripts that
 extract content from
 
-#### Overview of the processing pipeline
+####\. Overview of the processing pipeline
 
 Cortex frame received, streamed to file
 
