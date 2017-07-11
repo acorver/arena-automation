@@ -7,18 +7,16 @@
 #         (Anthony Leonardo Lab, Dec. 2016)
 # --------------------------------------------------------
 
-import os, collections, msgpack
+import os, sys, psutil, time, collections, msgpack
 import numpy as np
 from datetime import datetime
 import pandas as pd
 from scipy import interpolate
-import pickle
 import sqlite3
-
 import tkinter as tk
 from tkinter import filedialog
-from tkinter import messagebox
-from tkinter import simpledialog
+
+DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../data/'))
 
 # =======================================================================================
 # Data Structures and Constants
@@ -36,6 +34,52 @@ ExtractionSettings = collections.namedtuple('ExtractionSettings', 'files groupOu
 CORTEX_NAN = 9999999
 
 # =======================================================================================
+# Helper function for controlling process priority
+#
+#    Note: Because this library often runs at 100% cpu, the pc might become unusable.
+#          To prevent this, all processes are automatically given below-normal process
+#          priority, to keep the other programs and interfaces responsive.
+# =======================================================================================
+
+# Technically, the highest priority (realtime) is 20, but this makes the computer
+# difficult to use, and hangs other processes. So because these are all non-realtime
+# processing scripts, we never go higher than "HIGH" priority.
+HIGHEST_PRIORITY = 2
+LOWEST_PRIORITY = -20
+
+def setProcessPriority(priority):
+
+    niceness = 0
+
+    isWindows = True
+    try:
+        sys.getwindowsversion()
+    except AttributeError:
+        isWindows = False
+
+    if not isWindows:
+        niceness = priority
+    else:
+        if priority == -20:
+            niceness = psutil.IDLE_PRIORITY_CLASS
+        elif priority == -1:
+            niceness = psutil.BELOW_NORMAL_PRIORITY_CLASS
+        elif priority == 0:
+            niceness = psutil.NORMAL_PRIORITY_CLASS
+        elif priority == 1:
+            niceness = psutil.ABOVE_NORMAL_PRIORITY_CLASS
+        elif priority == 2:
+            niceness = psutil.HIGH_PRIORITY_CLASS
+        elif priority == 20:
+            niceness = psutil.REALTIME_PRIORITY_CLASS
+        else:
+            niceness = psutil.IDLE_PRIORITY_CLASS
+
+    p = psutil.Process()
+    print("Setting process priority to "+str(niceness))
+    p.nice(niceness)
+
+# =======================================================================================
 # Helper class
 # =======================================================================================
 
@@ -48,18 +92,48 @@ class StreamCounter(object):
         self.nbytes += len(s)
 
 # =======================================================================================
+# Get recent msgpack files
+# =======================================================================================
+
+# Age of file (w.r.t. last modified) in seconds
+def fileAge(f):
+    if f.endswith('.msgpack'):
+        fnameOrig = f.replace('.raw.msgpack','').replace('.msgpack','.msgpack.original')
+        if os.path.exists(fnameOrig):
+            f = fnameOrig
+    ft = time.time() - os.path.getmtime(f)
+    return ft
+
+# Size of file (in MB)
+def fileSize(f):
+    return os.path.getsize(f) / (1024 * 1000)
+
+def getRecentFiles(maxFileAge, minFileAge, minFileSize):
+    # Gather a list of data files
+    files = [os.path.join(DATA_DIR, y) + '/' + x for y in os.listdir(DATA_DIR) if
+               os.path.isdir(os.path.join(DATA_DIR, y)) and 'PREVIOUS_DATA' not in y
+                 for x in os.listdir(os.path.join(DATA_DIR, y)) if x.endswith('.msgpack')]
+
+    print(str(len(files))+" files found in folder.")
+
+    # Process newest files first
+    files.sort(key=lambda x: fileAge(x))
+
+    # Keep only files within the minimum-maximum age range
+    files = [x for x in files if fileAge(x) > minFileAge and \
+             fileAge(x) < maxFileAge and fileSize(x) > minFileSize]
+
+    return files
+
+# =======================================================================================
 # Ask for post-processing input files
 # =======================================================================================
 
-def askForExtractionSettings():
-    
-    files = []
-    groupOutputByDay = False
-    
+def askForExtractionSettings(allRecentFilesIfNoneSelected=False):
+
     # Ask for filenames
     root = tk.Tk()
     root.withdraw()
-    numCameras = 0
     filepaths = filedialog.askdirectory(title="Select the directory to process.")
     dirs = [filepaths,] #list(root.tk.splitlist(filepaths))
     
@@ -81,7 +155,13 @@ def askForExtractionSettings():
 
     # Process newest files first
     if len(files) > 0:
-        files.sort(key=lambda x: -os.path.getmtime(x))
+        files.sort(key=lambda x: -fileAge(x))
+    elif allRecentFilesIfNoneSelected:
+        files = getRecentFiles(3600 * 24 * 365, 60, 2)
+        for file in files:
+            print("  file: "+file)
+        if len(files) == 0:
+            print("No recent files found...")
 
     return ExtractionSettings(files, False)
 
@@ -188,31 +268,33 @@ def buildMocapIndex(file, verbose=False):
         raise Exception("Mocap index already exists.")
     else:
         # Correct frame indices to remove duplicates, if necessary
-        correctFrameIndices(file)
+        if not file.endswith('.raw.msgpack'):
+            correctFrameIndices(file)
 
         # Start creating index
         conn = sqlite3.connect(ofile)
         c = conn.cursor()
         c.execute('''CREATE TABLE idx
-                (frameID integer PRIMARY KEY, offset integer)''')
+                (frameID integer PRIMARY KEY, timestamp DATETIME, offset integer)''')
         c.execute('CREATE INDEX i1 ON idx (frameID)')
+        c.execute('CREATE INDEX i2 ON idx (timestamp)')
         conn.commit()
         
         buf = []
         curOffset = 0
         for frame in iterMocapFrames(file):
-            buf.append( (frame.frameID, curOffset) )            
+            buf.append( (frame.frameID, frame.time, curOffset) )
             curOffset = frame.byteOffset
             
             i += 1
             if (i % 100000) == 0:
                 try:
-                    c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
+                    c.executemany('insert into idx (frameID, timestamp, offset) values (?,?,?)', buf)
                 except:
                     # If failed, find the conflicting frameID
                     for b in buf:
                         try:
-                            c.execute('insert into idx (frameID, offset) values (?,?)', b)
+                            c.execute('insert into idx (frameID, timestamp, offset) values (?,?,?)', b)
                         except Exception as e:
                             print("Error inserting frame, frameID="+str(b[0])+".")
                             print("Likely duplicate frame index.")
@@ -222,9 +304,17 @@ def buildMocapIndex(file, verbose=False):
                 if verbose:
                     print("Processed "+str(i))
         
-        c.executemany('insert into idx (frameID, offset) values (?,?)', buf)
+        c.executemany('insert into idx (frameID, timestamp, offset) values (?,?,?)', buf)
         conn.commit()
         conn.close()
+
+# =======================================================================================
+# Get all markers in a given range of frames
+# =======================================================================================
+
+def iterAllMarkers(fname, startFrame, numFrames):
+    for frame in MocapFrameIterator(fname, startFrame=startFrame, numFrames=numFrames):
+        yield getAllMarkersInFrame(frame)
 
 # =======================================================================================
 # Return all 3d markers in a MocapFrame, regardless of whether they're recognized or not
@@ -232,10 +322,14 @@ def buildMocapIndex(file, verbose=False):
 
 def getAllMarkersInFrame(frame):
     m = []
-    m += frame.unidentifiedVertices
-    for yf in frame.yframes:
-        m += yf.vertices
-    return m
+    try:
+        m += np.array(frame.unidentifiedVertices).tolist()
+        for yf in frame.yframes:
+            m += yf.vertices.tolist()
+        return m
+    except Exception as e:
+        print(frame)
+        raise e
 
 # =======================================================================================
 # Iterate over available frameIDs
@@ -272,7 +366,7 @@ def iterMocapFrameIDs(fname, includeRowIDs=True):
 #
 
 class MocapFrameIterator:
-    def __init__(self, file, nearbyVertexRange=None, startFrame=None, endFrame=None, numFrames=None):
+    def __init__(self, file, nearbyVertexRange=None, startFrame=None, endFrame=None, numFrames=None, startTime=None):
         self.counter = StreamCounter()
         self.numFramesYielded = 0
         self.startFrame = startFrame
@@ -288,7 +382,7 @@ class MocapFrameIterator:
             self.f = open(file,'rb')
 
             # If a start frame is requested, look it up in the index
-            if startFrame != None:
+            if startFrame is not None or startTime is not None:
                 fileIdx = file.replace('.msgpack','.msgpack.index')
                 if not os.path.exists(fileIdx):
                     # Auto-build necessary index if it doesn't exist
@@ -297,18 +391,33 @@ class MocapFrameIterator:
                 # Seek to right point in file
                 conn = sqlite3.connect(fileIdx)
                 c = conn.cursor()
-                s = [x for x in c.execute(
-                    'select frameID, offset from idx where frameID <= ? order by frameID DESC limit 2', 
-                        (int(startFrame),))]
+
+                if startFrame is not None:
+                    s = [x for x in c.execute(
+                        'select frameID, offset from idx where frameID <= ? order by frameID DESC limit 2',
+                            (int(startFrame),))]
+                    if len(s) == 0:
+                        raise Exception("Start frame specified, but no frameID <= requested frame found... \n" +
+                                        "Tried query: 'select frameID, offset from idx where frameID <= " + str(
+                            startFrame) + " order by frameID desc limit 1'")
+                    else:
+                        self.f.seek(s[0][1])
+
+                elif startTime is not None:
+                    s = [x for x in c.execute(
+                        'select timestamp, frameID, offset from idx where timestamp < '+str(int(startTime))+
+                        ' and timestamp != 0 order by frameID DESC limit 20',())]
+                    if len(s) == 0:
+                        raise Exception("Start time specified, but no timestamp <= requested start time... \n" +
+                                        "Tried query: 'select timestamp, frameID, offset from idx where timestamp <= " + str(
+                            startTime) + " order by frameID desc limit 1'")
+                    else:
+                        self.f.seek(s[0][2])
+
                 # Note: This code above has been found not to work when type(startFrame)==np.int64...
                 #       We're therefore forcing 'int' type here!
                 conn.close()
-                if len(s) == 0:
-                    raise Exception("Start frame specified, but no frameID <= requested frame found... \n" + 
-                        "Tried query: 'select frameID, offset from idx where frameID <= "+str(startFrame)+" order by frameID desc limit 1'")
-                else:
-                    self.f.seek(s[0][1])
-            
+
             self.unpacker = msgpack.Unpacker(self.f)
         else:
             raise Exception("Mocap Frame Iterator currently only parses .msgpack files.")
@@ -424,6 +533,12 @@ def iterMocapFrames(file, nearbyVertexRange=None, startFrame=None, endFrame=None
 # =======================================================================================
 
 def readYFrames(file, nearbyVertexRange=None):
+
+    for frame in MocapFrameIterator(file, nearbyVertexRange=nearbyVertexRange):
+        for yframe in frame.yframes:
+            yield yframe
+
+    """ DEPRECATED:
     with open(file,'rb') as f:
         for x in msgpack.Unpacker(f):
             if not isinstance(x, int):
@@ -457,6 +572,7 @@ def readYFrames(file, nearbyVertexRange=None):
                                     
                         # Pass data to processing function
                         yield Frame(frame=iframe, vertices=vertices, pos=pos, trajectory=-1, time=t, nearbyVertices=nearbyVertices)
+    """
 
 # =======================================================================================
 # Selectively update Yframe data structure
@@ -510,15 +626,6 @@ def countRecords(file, includeFrameRange=False, createIndexIfNotExists=True):
     # Done!
     return totalNumRecords if not includeFrameRange else (totalNumRecords, minFrameIdx, maxFrameIdx)
 
-# This function returns a Queue that will be filled with the record number as soon as it is computed
-def countRecordsAsync(file):
-    q = multiprocessing.Queue()
-    def _countRecords(file):
-        q.put(countRecords(file))
-    t = threading.Thread(target=_countRecords, args = (file,))
-    t.start()
-    return q
-    
 # =======================================================================================
 # Convert a timestamp to formatted string
 # =======================================================================================
