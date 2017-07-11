@@ -48,9 +48,9 @@ MAX_RAW_TIME_MISMATCH = 10 # 10 seconds max mismatch (average mismatch appears t
 def openVCDB(outputDir):
     dbFile = os.path.join(outputDir, 'vc.sqlite')
     existed = os.path.isfile(dbFile)
-    # We allow a high timeout (2 minutes), because multiple streams will be locking the database and
+    # We allow a high timeout (2 hours), because multiple streams will be locking the database and
     # writing in turn...
-    conn = sqlite3.connect(dbFile, timeout=120)
+    conn = sqlite3.connect(dbFile, timeout=7200)
     c = conn.cursor()
     return conn, c, existed
 
