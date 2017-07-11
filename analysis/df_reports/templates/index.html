@@ -17,12 +17,80 @@
         the arena.
     </p>
 
-    <h3>Trajectory Overview</h3>
-    
+    <h5>Relevant Takeoffs</h5>
+    <p>These takeoffs span at least 15 cm and are preceded by at least 2 seconds of perching.</p>
+    <iframe width="100%" height="700px" srcdoc="{{snippets_takeoffs}}"
+            frameBorder="0" seamless='seamless'></iframe>
+
+    <h5>Individual Takeoffs</h5>
+    <ul id="takeoff_pagination" class="pagination-sm"></ul>
+    {% for plot in snippets_takeoffs_individual %}
+
+        <div data-src="{{plot}}"
+                class="takeoff_individual" id="takeoff_{{loop.index}}">
+
+            <span class="label label-default">
+                Start frame: {{ takeoff_individual_startframe[loop.index0] }}
+            </span>
+            <span class="label label-default">
+                End frame: {{ takeoff_individual_endframe[loop.index0] }}
+            </span>
+            <span class="label label-default">
+                Trajectory ID: {{ takeoff_individual_trajectory[loop.index0] }}
+            </span>
+            <span class="label label-default">
+                Time: {{ takeoff_individual_time[loop.index0] }}
+            </span>
+
+            <div class="iframe-container"></div>
+        </div>
+    {% endfor %}
+
+    <h5>Individual Rejected Flights</h5>
+    <ul id="rejected_pagination" class="pagination-sm"></ul>
+    {% for plot in snippets_takeoffs_individual_rejected %}
+
+        <div data-src="{{plot}}"
+            class="takeoff_individual_rejected" id="takeoff_rejected_{{loop.index}}">
+
+            <span class="label label-default">
+                Start frame: {{ takeoff_individual_rejected_startframe[loop.index0] }}
+            </span>
+            <span class="label label-default">
+                End frame:{{ takeoff_individual_rejected_endframe[loop.index0] }}
+            </span>
+            <span class="label label-default">
+                Trajectory ID: {{ takeoff_individual_rejected_trajectory[loop.index0] }}
+            </span>
+            <span class="label label-default">
+                Time: {{ takeoff_individual_rejected_time[loop.index0] }}
+            </span>
+
+            <div class="iframe-container"></div>
+        </div>
+    {% endfor %}
+
+    <h5>All Flight Activity (Movie)</h5>
+
     <video width="800" height="500" controls autoplay loop>
         <source src="{{srcTrajectories3D}}" type="video/mp4">
         Your browser does not support the video tag.
     </video>
+
+    <h5>All Flight Activity (Interactive)</h5>
+
+    <p>Note the graph below is especially heavily subsampled for performance reasons:</p>
+
+    <iframe width="100%" height="700px" srcdoc="{{snippets_takeoffs_allflights}}"
+            frameBorder="0" seamless='seamless'></iframe>
+
+    <h5>Flysim Trajectories</h5>
+    <iframe width="100%" height="700px" srcdoc="{{snippets_takeoffs_flysim}}"
+            frameBorder="0" seamless='seamless'></iframe>
+
+    <h5>Non-flysim unID'ed Marker Trajectories</h5>
+    <iframe width="100%" height="700px" srcdoc="{{snippets_takeoffs_nonflysim}}"
+            frameBorder="0" seamless='seamless'></iframe>
 
     <h3>Summary of Activity</h3>
 
@@ -35,16 +103,18 @@
                 unless noted otherwise.
             </td>
         </tr>
+        <!--
         <tr>
             <td>Number of flights:</td>
             <td>
                 TODO
             </td>
         </tr>
+        -->
         <tr>
-            <td>Number of (upward) takeoffs:</td>
+            <td>Number of takeoffs (minimum 2 seconds of perching before takeoff):</td>
             <td>
-                TODO
+                {{numTakeoffs}}
             </td>
         </tr>
     </table>
@@ -76,6 +146,52 @@
         USB trigger was ____.
     </p>
 
+    <script type="text/javascript" src="jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="jquery.twbsPagination.min.js"></script>
     <script type="text/javascript" src="bootstrap.min.js"></script>
+    <script type="text/javascript" src="jquery.purgeFrame.js"></script>
+
+    <script>
+
+        var lazyLoadIframe = function(allEl, el) {
+            $(allEl).each(function(i, x){
+                $(this).find('iframe').each(function(j, fr){
+                    $(this).purgeFrame().done(function(){
+                        fr = null;
+                    });
+                });
+            });
+
+            setTimeout(function(){
+                $(el).find('.iframe-container').html('<iframe width="100%" height="700px" frameBorder="0" '+
+                    'seamless="seamless" src="'+$(el).data('src')+'"></iframe>');
+            }, 100);
+        };
+
+        $('#takeoff_pagination').twbsPagination({
+            totalPages: $('.takeoff_individual').length,
+            visiblePages: 10,
+            onPageClick: function (event, page) {
+                $('.takeoff_individual').hide();
+                $('#takeoff_'+page).show();
+                lazyLoadIframe('.takeoff_individual', '#takeoff_'+page);
+            }
+        });
+
+        $('#rejected_pagination').twbsPagination({
+            totalPages: $('.takeoff_individual_rejected').length,
+            visiblePages: 10,
+            onPageClick: function (event, page) {
+                $('.takeoff_individual_rejected').hide();
+                $('#takeoff_rejected_'+page).show();
+                lazyLoadIframe('.takeoff_individual_rejected', '#takeoff_rejected_'+page);
+            }
+        });
+
+        $(document).ready(function(){
+            $('.takeoff_individual').hide();
+            $('.takeoff_individual_rejected').hide();
+        });
+    </script>
 </body>
 </html>
