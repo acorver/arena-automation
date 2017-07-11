@@ -21,14 +21,20 @@ import os, multiprocessing, shutil
 import datetime, time
 import sqlite3
 
+DEBUG     = True
 OVERWRITE = False
+DEBUG_SELECTDIR = '17-07-04'
 
 # =======================================================================================
 # Process a given day
 # =======================================================================================
 
 def processFile(folderPrefix, dayParts):
-    
+
+    # For debug purposes, allow only certain dirs to be processed
+    if DEBUG_SELECTDIR not in folderPrefix:
+        return
+
     # Create the output folder
     os.makedirs(folderPrefix, exist_ok=True)
 
@@ -44,9 +50,9 @@ def processFile(folderPrefix, dayParts):
             print("Merging daily files (single part, so simple copy): "+folderPrefix)
 
             part = dayParts[0]
-            if not os.path.exists(fnameOutLog) or OVERWRITE:
-                shutil.copyfile(part+'/'+part+'.msgpack', fnameOut)
             if not os.path.exists(fnameOut) or OVERWRITE:
+                shutil.copyfile(part+'/'+part+'.msgpack', fnameOut)
+            if not os.path.exists(fnameOutLog) or OVERWRITE:
                 shutil.copyfile(part+'/'+part+'.log'    , fnameOutLog)
         else:
             print("Merging daily files: "+folderPrefix)
@@ -86,6 +92,7 @@ def run(settings, async=True):
     
     # Get a list of folders
     folders = [x for x in os.listdir('./') if os.path.isdir(x)]
+    folders.sort(key=lambda x: -os.path.getmtime(x))
     
     # Remove folders that don't match the patterns
     def _isdated(x):
@@ -129,4 +136,4 @@ def run(settings, async=True):
     # Done!
             
 if __name__ == '__main__':    
-    run(None)
+    run(None, async=(not DEBUG))
