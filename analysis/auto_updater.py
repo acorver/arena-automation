@@ -28,29 +28,12 @@ def scheduleNext(s):
 
 # TODO: Run this app in the tray!
 
-# Age of file (w.r.t. last modified) in seconds
-def fileAge(f):
-    ft = time.time() - os.path.getmtime(f)
-    return ft
-
-# Size of file (in MB)
-def fileSize(f):
-    return os.path.getsize(f) / (1024 * 1000)
-
 # 
 def checkFiles(s):
     
     # Gather a list of data files
-    files = [y + '/' + x for y in os.listdir('./') if os.path.isdir(y)
-             for x in os.listdir('./'+y) if x.endswith('.msgpack')]
-    
-    # Process newest files first
-    files.sort(key=lambda x: -os.path.getmtime(x))
-    
-    # Keep only files within the minimum-maximum age range
-    files = [x for x in files if fileAge(x) > MIN_AUTO_UPDATE_AGE and \
-        fileAge(x) < MAX_AUTO_UPDATE_AGE and fileSize(x) > MIN_RAW_DATA_SIZE]
-    
+    files = util.getRecentFiles(MAX_AUTO_UPDATE_AGE, MIN_AUTO_UPDATE_AGE, MIN_RAW_DATA_SIZE)
+
     # Process?
     if len(files) > 0:
         for file in files:
