@@ -2,8 +2,9 @@
 #
 #
 
-DEBUG = False
-DEBUG_STARTFRAME = 16884134
+DEBUG = True
+DEBUG_STARTFRAME = 0
+DEBUG_CAMS = list(range(18))
 
 # =======================================================================================
 # Change working directory so this script can be run independently as well as as a module
@@ -192,9 +193,13 @@ def findTriggerBoxInFrames(fname, camID, startFrame=None, numFrames=None):
 def findTriggerAsync(frame, camID):
     try:
         syncbox, triggered = findTriggerBoxInFrame(frame, camID, spacing=38)
+
+        timestamp_str = ''
+        if syncbox is not None:
+            timestamp_str = str(datetime.datetime.fromtimestamp(syncbox['timestamp']/1000))
+
         if not DEBUG:
             if triggered:
-                timestamp_str = str(datetime.datetime.fromtimestamp(syncbox['timestamp']/1000))
                 return 'trigger', syncbox['camID'], syncbox['frame'], syncbox['timestamp'], timestamp_str
             else:
                 return None
@@ -207,12 +212,14 @@ def findTriggerAsync(frame, camID):
                     sb.append(syncbox[c][1])
 
             if len(sb) == 6:
-                return tuple( ['debug', triggered,
+                return tuple( ['trigger' if triggered else 'debug', triggered,
                                len(syncbox['additionalPts']),
-                               camID, frame.frameID, 0, ''] + sb )
+                               camID, frame.frameID, syncbox['timestamp'], timestamp_str] + sb )
             else:
                 return None # Don't print info for frames with no Syncbox found
     except Exception as e:
+        if DEBUG:
+            raise
         return e
        
 # Worker function    
@@ -229,11 +236,12 @@ def findTriggers_Worker(tasks, output, async=True):
                         # When a trigger was detected write the frame number and camera ID to file
                         output.put(','.join([str(y) for y in r]))
         tasks.task_done()
+        output.put('DONE')
         # If async is false, we break the for loop, so control goes back to findTriggers while loop
         if not async:
             break
 
-def findTriggers(fname, camIDs, async=True, startFrame=None):
+def findTriggers(fname, camIDs, async=True, startFrame=None, useLog=True):
 
     fnameLedTriggers = fname.replace('.raw.msgpack','').replace('.msgpack','')+'.led_triggers_tmp'
 
@@ -242,12 +250,8 @@ def findTriggers(fname, camIDs, async=True, startFrame=None):
         print("Skipping trigger search, file already exists: " + fnameLedTriggers)
         return
 
-    # Number of CPUs to use (due to IO reading limits, only 8 workers appear to be necessary 
-    # for maximum performance)
-    NUM_CPUS = 8
-    
-    # Create an iterator over MoCap frames
-    mocap = util.MocapFrameIterator(fname, startFrame=startFrame)
+    # Number of CPUs to use
+    NUM_CPUS = max(1, multiprocessing.cpu_count() - 1)
     
     # Get total number of frames
     totalNumFrames = util.countRecords(fname)
@@ -259,36 +263,91 @@ def findTriggers(fname, camIDs, async=True, startFrame=None):
     pool = None
     if async:
         pool = multiprocessing.Pool(NUM_CPUS, findTriggers_Worker, (tasks, output))
-    
+
+    # Optionally, use log to look only at frames with known trigger point
+    times = None
+    if useLog:
+        log = pd.read_csv(fname.replace('.raw.msgpack','').replace('.msgpack','')+'.log.txt',sep='\t', header=None, names=['i','time','msg'])
+        log = log[log.msg.str.contains('Sent trigger')]
+        times = sorted(log.time.tolist())
+        print("Number of triggers sent: "+str(len(times)))
+        for time in times:
+            print("Looking for trigger around t="+str(time))
+
+    # Open frame iterator
+    mocap = None
+    if not useLog:
+        # Create an iterator over MoCap frames
+        mocap = util.MocapFrameIterator(fname, startFrame=startFrame)
+
     # Start queueing frames
     numFramesProcessed = 0
+    numBusy = 0
     with open(fnameLedTriggers,'w') as fOut:
-        fOut.write('camID,frame,timestamp,timestamp_str\n')
+        if not DEBUG:
+            fOut.write('type,camID,frame,timestamp,timestamp_str\n')
+        else:
+            fOut.write('type,triggered,additionalPts,camID,frame,timestamp,timestamp_str,x1,y1,x2,y2,x3,y3\n')
+        framesLeft = True
         while True:
-            try:
-                numFramesProcessed += 1000
-                # We send frames to be processed in batches, which should speed up processing
-                newTasks = [(mocap.__next__(), camIDs) for i in range(1000)]
+            numFramesProcessed += 1000
+            # We send frames to be processed in batches, which should speed up processing
+            if framesLeft:
+                newTasks = []
+                if useLog:
+                    if len(times) > 0:
+                        time = times.pop()
+                        newTasks = [(f, camIDs) for f in util.MocapFrameIterator(fname,
+                           startTime=time - 10000, numFrames=20 * 200)]
+                        print("Processing frame range (time="+str(time)+"): ["+str(newTasks[0][0].frameID)+","+str(newTasks[-1][0].frameID)+"]")
+                    else:
+                        framesLeft = False
+                        #for i in range(NUM_CPUS):
+                        #    tasks.put('NONE_LEFT')
+                else:
+                    newTasks = []
+                    nf = 0
+                    while nf < 1000:
+                        try:
+                            newTasks.append( (mocap.__next__(), camIDs) )
+                            nf += 1
+                        except StopIteration:
+                            framesLeft = False
+                            #for i in range(NUM_CPUS):
+                            #    tasks.put('NONE_LEFT')
                 tasks.put( newTasks )
-                if tasks.qsize() > 100:
-                    sleep(1)
-                if (numFramesProcessed%5000)==0:
-                    s = "/" + str(totalNumFrames)+" ("+'{0:.{1}f}'.format(
-                            100*numFramesProcessed/totalNumFrames, 3)+'%)'
-                    print("Processed "+str(numFramesProcessed)+s+" frames (frame="+
-                          str(newTasks[0][0].frameID)+")")
-                # If not async, process the newly queued item now
-                if not async:
-                    findTriggers_Worker(tasks, output, async=False)
-                # Write output
-                while not output.empty():
-                    s = output.get()
+                numBusy += 1
+
+            if tasks.qsize() > 100:
+                sleep(1)
+
+            if ((numFramesProcessed%5000)==0 or useLog) and len(newTasks) > 0:
+                s = "/" + str(totalNumFrames)+" ("+'{0:.{1}f}'.format(
+                        100*numFramesProcessed/totalNumFrames, 3)+'%)'
+                print("Processed "+str(numFramesProcessed)+s+" frames (frame="+
+                      str(newTasks[0][0].frameID)+")")
+
+            # If not async, process the newly queued item now
+            if not async:
+                findTriggers_Worker(tasks, output, async=False)
+
+            # Write output
+            while not output.empty():
+                s = output.get()
+                if s == 'DONE':
+                    numBusy -= 1
+                else:
                     print("Wrote to file: "+s)
                     fOut.write(s+'\n')
                     fOut.flush()
-            except StopIteration as esi:
+
+            # Done?
+            if numBusy == 0 and not framesLeft and tasks.empty():
                 break
-    
+
+    # Stop worker threads
+    pool.terminate()
+
     print("Done searching for triggers.")
 
 # =======================================================================================
@@ -296,6 +355,9 @@ def findTriggers(fname, camIDs, async=True, startFrame=None):
 # =======================================================================================
 
 def findCameraWithSync(fname):
+
+    if DEBUG:
+        return [(x,1) for x in DEBUG_CAMS]
 
     # Write debug image with all 2d markers
     plot2dCentroids(fname)
@@ -313,7 +375,7 @@ def findCameraWithSync(fname):
     # (100 frames (.5 second) every 60 seconds)
     startFrames = []
     for i, id in util.iterMocapFrameIDs(fname):
-        if (i % (60 * 200)) == 0:
+        if (i % (60 * 200 * 10)) == 0:
             startFrames.append(id)
 
     for camID in range(maxCamID+1):
@@ -438,8 +500,7 @@ def finalizeTriggers(fname):
     fnameLedTriggersFinal = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.led_triggers'
 
     # Read the trigger file
-    triggers = pd.read_csv(fnameLedTriggers, skiprows=1, header=None,
-                 names=['type','camID','frameID','timestamp','timestamp_str'])
+    triggers = pd.read_csv(fnameLedTriggers)
 
     # Look for continuous blocks of 5 frames with trigger
     # TODO: Do quality check by checking how many cameras actually support that trigger being there,
@@ -449,23 +510,24 @@ def finalizeTriggers(fname):
     actualTriggers = {}
     for camID in triggers.camID.unique():
         # Get frames seen as triggers by this camera
-        frames = triggers[triggers.camID==camID].frameID.tolist()
-        # Find continuous ranges
-        # Code source: https://stackoverflow.com/questions/7352684/how-to-find-the-groups-of-consecutive-elements-from-an-array-in-numpy, user answer: unutbu
-        ranges = [(x[0], x[-1]) for x in np.split(frames, np.where(np.diff(frames) != 1)[0] + 1)]
-        # Find ranges that are 5 frames long
-        for r in [r for r in ranges if (1+r[1]-r[0]) == 5]:
-            if r[0] in actualTriggers:
-                actualTriggers[r[0]][0].append(camID)
-            else:
-                # Get whether trigger is valid
-                #    - e.g. trigger that overlaps, and starts later than, another trigger is not valid
-                #      (however, this shouldn't happen, so report a warning)
-                isValid = (len([z for z in actualTriggers.keys() if z < r[0] and z > (r[0] - 5)]) == 0)
-                if not isValid:
-                    print("WARNING: Overlapping triggers detected!")
-                # Save!
-                actualTriggers[r[0]] = [[camID], r[0], r[1], isValid]
+        frames = sorted(list(set(triggers[(triggers.camID==camID)&(triggers.type=='trigger')].frame.tolist())))
+        if len(frames) > 0:
+            # Find continuous ranges
+            # Code source: https://stackoverflow.com/questions/7352684/how-to-find-the-groups-of-consecutive-elements-from-an-array-in-numpy, user answer: unutbu
+            ranges = [(x[0], x[-1]) for x in np.split(frames, np.where(np.diff(frames) != 1)[0] + 1)]
+            # Find ranges that are 5 frames long
+            for r in [r for r in ranges if (1+r[1]-r[0]) == 5]:
+                if r[0] in actualTriggers:
+                    actualTriggers[r[0]][0].append(camID)
+                else:
+                    # Get whether trigger is valid
+                    #    - e.g. trigger that overlaps, and starts later than, another trigger is not valid
+                    #      (however, this shouldn't happen, so report a warning)
+                    isValid = (len([z for z in actualTriggers.keys() if z < r[0] and z > (r[0] - 5)]) == 0)
+                    if not isValid:
+                        print("WARNING: Overlapping triggers detected!")
+                    # Save!
+                    actualTriggers[r[0]] = [[camID], r[0], r[1], isValid]
 
     # Now output a new file with following data: triggerFrame, camIDs (i.e. list), timestamp, timestamp_str
     with open(fnameLedTriggersFinal, 'w') as fOut:
@@ -478,7 +540,7 @@ def finalizeTriggers(fname):
 
             timestamp, timestamp_str = None, None
             for camID in camIDs:
-                s = (triggers.camID == camID) & (triggers.frameID == frameID)
+                s = (triggers.camID == camID) & (triggers.frame == frameID)
                 if np.any(s):
                     timestamp     = triggers[s].timestamp.tolist()[0]
                     timestamp_str = triggers[s].timestamp_str.tolist()[0]
@@ -501,6 +563,9 @@ def plotTriggerSignals(fname):
     # Ensure that the output directory exists
     os.makedirs(os.path.join(os.path.dirname(fname), 'debug/triggers'), exist_ok=True)
 
+    # Get all cameras
+    camsToPlot = range(getMaxCamID(fname))
+
     # Process each trigger
     for _, trigger in triggers.iterrows():
 
@@ -508,9 +573,12 @@ def plotTriggerSignals(fname):
         fnameOut = os.path.join(os.path.dirname(fname), 'debug/triggers/') + \
                    'trigger_' + str(trigger.frameID) + '.png'
 
+        # camsToPlot = trigger.camIDs.split(' ')
+        print("Plotting trigger at frame: "+str(trigger.frameID))
+
         # (Re-)Extract triggerbox signal
         td = []
-        for camID in [int(x) for x in trigger.camIDs.split(' ')]:
+        for camID in [int(x) for x in camsToPlot]:
             tbs = [(f.frameID, findTriggerBoxInFrame(f, camID, spacing=35)[0]) for f in
                    util.iterMocapFrames(fname, startFrame=trigger.frameID - 10, numFrames=20)]
             for i, tb in tbs:
@@ -523,8 +591,9 @@ def plotTriggerSignals(fname):
         td = pd.DataFrame(td, columns=['camID', 'frame', 'type', 'x', 'y'])
 
         # Plot
+        print("Saving image...")
         p = sns.FacetGrid(td, col='frame', row='camID',
-                          sharex=False, sharey=False)
+                          sharex='row', sharey='row')
         p.map(plt.scatter, 'x', 'y')
         p.savefig(fnameOut)
 
@@ -564,7 +633,7 @@ def processFile(fname):
                 print("Camera "+str(camWithSync[0])+" ("+str(camWithSync[1])+").")
 
             # Search for triggers
-            findTriggers(fname, [x[0] for x in camsWithSync], async=False,
+            findTriggers(fname, [x[0] for x in camsWithSync], async=True,
                          startFrame=(DEBUG_STARTFRAME if DEBUG else None))
 
     # Finalize trigger signals
