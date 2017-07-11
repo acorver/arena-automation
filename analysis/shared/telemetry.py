@@ -11,7 +11,7 @@
 # Import libraries
 # =================================================================================================
 
-import os, struct, numpy as np, pandas as pd
+import os, struct, numpy as np, pandas as pd, datetime, time
 from configparser import ConfigParser
 
 # =================================================================================================
@@ -104,9 +104,16 @@ def reconstructEphys(fname, saveToFile=False, ignoreSavedFile=False):
     def exc(exception):
         errorLog.append(exception)
 
+    # Helper function
+    def safeint(x):
+        try:
+            return int(x)
+        except:
+            return x
+
     # Get variable from bug3 file
     def getVariableFromBlock(blockID, key):
-        return [int(x) for x in bug3File._sections[blockID][key].split(',')]
+        return [safeint(x) for x in bug3File._sections[blockID][key].split(',')]
 
     # Loop through the raw data
     for blockID in bug3File.sections():
@@ -115,7 +122,12 @@ def reconstructEphys(fname, saveToFile=False, ignoreSavedFile=False):
         scanCount = getVariableFromBlock(blockID, 'spikegl_datafile_scancount')[0]
         chipFrames = getVariableFromBlock(blockID, 'chipframecounter')
         boardFrames = getVariableFromBlock(blockID, 'boardframecounter')
-        systemclock = getVariableFromBlock(blockID, 'systemclock')
+        try:
+            systemclock = getVariableFromBlock(blockID, 'systemclock')[0]
+        except:
+            # Older versions of SpikeGL don't produce "systemclock" fields...
+            systemclock = datetime.datetime.fromtimestamp(
+                os.path.getctime(fname)).strftime('%H:%M:%S.%f')
 
         # Check data integrity
         if (len(boardFrames) != len(chipFrames)):
@@ -125,12 +137,20 @@ def reconstructEphys(fname, saveToFile=False, ignoreSavedFile=False):
         isValid = np.logical_not(np.all(np.array(chipFrames) == 0))
 
         if not isValid:
-            block = chipFrames = boardFrames = scanCount = (np.array(chipFrames) * np.nan).tolist()
+            block = chipFrames = boardFrames = scanCount = systemclock = (np.array(chipFrames) * np.nan).tolist()
         else:
-            scanCount = [scanCount + (i - (len(chipFrames)-1)) * 16 for i in range(len(chipFrames))]
+            scanCount   = [scanCount + (i - (len(chipFrames)-1)) * 16 for i in range(len(chipFrames))]
             block       = [block       for i in range(len(chipFrames))]
-            systemclock = [meta.createdon[0:meta.createdon.find(' ')] + ' ' +
-                           systemclock for i in range(len(chipFrames))]
+
+            date = ''
+            try:
+                date = meta.createdon[0:meta.createdon.find(' ')]
+            except:
+                date = datetime.datetime.fromtimestamp(os.path.getctime(fname)).strftime('%Y-%m-%d')
+
+            systemclock = [date + ' ' + systemclock for i in range(len(chipFrames))]
+            systemclock = [datetime.datetime.strptime(x, '%Y-%m-%d %H:%M:%S.%f') for x in systemclock]
+            systemclock = [int(time.mktime(x.timetuple())*1e3 + x.microsecond/1e3) for x in systemclock]
 
         vChipFrames += chipFrames
         vBoardFrames += boardFrames
@@ -211,7 +231,7 @@ def reconstructEphys(fname, saveToFile=False, ignoreSavedFile=False):
             vTime[i] = float(t) / meta.sratehz
 
         # Add the new column to the dataframe
-        d['time'] = vTime[::direction]
+        d.loc[:,'time'] = vTime[::direction]
 
         # Done computing time in this direction
         return d
@@ -220,24 +240,40 @@ def reconstructEphys(fname, saveToFile=False, ignoreSavedFile=False):
     #    Note: Rapid triggering and long time windows can cause the recorded segment to include
     #          multiple trigger points. We look for the one closest to the intended trigger point
     #         (currently 8 seconds into a 13 second segment, i.e. 8 second pre-buffer, 5 second post-buffer)
-    columnName = [x for x in data if '(TRG)' in x][0]
-    trigSignal = data[columnName]
-    trigIdx    = trigSignal[trigSignal.diff() > 1000]
-    relativeTriggerTiming = (meta.filetimesecs - meta.pdstoptime) / meta.filetimesecs
-    bestTrig   = [abs(x - (relativeTriggerTiming * len(trigSignal))) for x in trigIdx.index.tolist()]
-    bestTrig   = bestTrig.index(min(bestTrig))
-    trigIdx    = trigIdx.index[bestTrig]
+    columnName = [x for x in data if '(TRG)' in x]
+    if len(columnName) == 0:
+        print("No hardware trigger for ephys file: "+fname)
+        # Still create time column, but set it to NaN
+        data['time'] = np.NaN
+    else:
+        columnName = columnName[0]
 
-    # Compute time leftward and rightward w.r.t. the trigger point
-    x1 = computeTime(data[data.index <= trigIdx], direction = -1)
-    x2 = computeTime(data[data.index >= trigIdx], direction =  1)
-    # Note that we included the trigger sample (t=0) in the leftwards/backward-looking computeTime(.) call
-    # as well. This was to correctly compute the time offset of the first backward sample. We now remove
-    # this first sample to prevent a duplicate t=0 sample.
-    data = pd.concat([x1.iloc[0:len(x1)-1], x2], axis=0)
+        trigSignal = data[columnName]
+        trigIdx    = trigSignal[trigSignal.diff() > 1000]
+        relativeTriggerTiming = (meta.filetimesecs - meta.pdstoptime) / meta.filetimesecs
+        bestTrig   = [abs(x - (relativeTriggerTiming * len(trigSignal))) for x in trigIdx.index.tolist()]
+        bestTrig   = bestTrig.index(min(bestTrig))
+        trigIdx    = trigIdx.index[bestTrig]
+
+        # Compute time leftward and rightward w.r.t. the trigger point
+        x1 = computeTime(data[data.index <= trigIdx], direction = -1)
+        x2 = computeTime(data[data.index >= trigIdx], direction =  1)
+        # Note that we included the trigger sample (t=0) in the leftwards/backward-looking computeTime(.) call
+        # as well. This was to correctly compute the time offset of the first backward sample. We now remove
+        # this first sample to prevent a duplicate t=0 sample.
+        data = pd.concat([x1.iloc[0:len(x1)-1], x2], axis=0)
 
     # Set sampleIndex as Pandas DataFrame index
     data.set_index('sampleIndex', inplace=True)
+
+    # We always add an estimated system clock, even to NaN rows
+    if (data.time==0).any():
+        data.systemClock = int(data.systemClock[data.time==0])
+        # Correct system clock estimate (currently set to only a single time, the creation of the file)
+        data.systemClock += 1000 * (data.index - data.index[data.time==0][0]) / meta.sratehz
+    else:
+        data.systemClock.fillna(method='ffill', inplace=True)
+        data.systemClock.fillna(method='bfill', inplace=True)
 
     # Save to file?
     if saveToFile:
