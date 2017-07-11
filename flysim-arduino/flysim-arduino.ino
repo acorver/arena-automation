@@ -242,6 +242,11 @@ void triggerCortex(bool trigger) {
   }
 }
 
+void cmdTriggerCortex(char** pArgs, uint8_t numArgs) {
+
+  triggerCortex(!g_bCortexRecording);
+}
+
 // ================================================================
 // Setup
 // ================================================================
@@ -808,6 +813,7 @@ void updateX(long elapsedTime) {
   if (abs(g_CurPosX - targetPositionX) > MAX_X_ERROR) {
     kangarooX->p(targetPositionX / CONVERSION_X, targetVelocityX / CONVERSION_X);
   } else {
+    kangarooX->p(targetPositionX / CONVERSION_X, 10 / CONVERSION_X);
     g_CurrentUpdateFunction = NULL;
     g_CurrentUpdateFunctionStr = "";
   }
@@ -1311,6 +1317,7 @@ void processSerialCommand(char** pArgs, uint8_t numArgs) {
   } else if (cmd == "neutral"    ) { fun = &cmdNeutral;
   } else if (cmd == "speedx"     ) { fun = &cmdSpeedX;
   } else if (cmd == "trajectory" ) { fun = &cmdTrajectory;
+  } else if (cmd == "cortex"     ) { fun = &cmdTriggerCortex;
   } else if (cmd == "df_ready_on_perch" ) { fun = &cmdDfOnPerch;
   } else {
 
@@ -1407,6 +1414,11 @@ void loop() {
     }
   } else {
     if (targetPositionZ != lastTargetPositionZ) {
+      if (!Serial2) {
+        Serial2.begin(115200);
+        while(!Serial2) { delay(1); }
+      }
+      
       lastTargetPositionZ = targetPositionZ;
       Serial2.print("position ");
       Serial2.println( int( max(0, targetPositionZ-50) * 1.2 ) );
