@@ -48,11 +48,12 @@ TRAJ_TIMEOUT = 100
 TRAJ_MAXDIST = 100
 
 # 
-MAX_STATIONARY_MOVEMENT = 20
+MAX_STATIONARY_MOVEMENT = 30
 
 #
 TRAJ_SAVE_MINLEN = 100
 TRAJ_TAKEOFF_MINLEN = 50
+PERCH_SAVE_MINLEN = 400
 
 # Flysim Axis details (in XY plane)
 FLYSIM_AXIS_PT1 = np.array([-400,  10])
@@ -134,10 +135,10 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
     # Detect takeoff characteristics
     for fr in frameRanges:
         ## Is this an upward trajectory? (during the first 2 sec, i.e. 400 frames) (Indicating takeoff)
-        frames = [x for x in trajectory if x.frame >= fr[1] and x.frame < fr[1] + 400]
-                
+        frames = [x for x in trajectory if x.frame >= (fr[1]-200) and x.frame < fr[1] + 600]
+
         # Minimum takeoff length required
-        if len(frames) < TRAJ_TAKEOFF_MINLEN: continue
+        if (len(frames)-200) < TRAJ_TAKEOFF_MINLEN: continue
         
         # Is any position in trajectory at least 100 mm higher than starting position?
         #isUpward = ( len([x for x in frames if x.pos[2] > frames[0].pos[2]+100]) > 0 )
@@ -168,7 +169,7 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
             flysimTraj = -1
 
         ## Range of the first 2 seconds (400 frames)
-        bboxSize = np.linalg.norm(np.ptp([x.pos for x in trajectory if x.frame >= fr[1] and x.frame < fr[1] + 400], axis=0))
+        bboxSize = np.linalg.norm(np.ptp(np.array([x.pos for x in frames]), axis=0))
 
         # Compute the fraction of the trajectory frames that did not diverge from flysim axis
         R2 = -1
@@ -202,7 +203,7 @@ def processTrajectory(trajectory, foPerches, foTakeoffs, foTracking, foDebug, ta
     return takeoffID
 
 def savePerchInfo(foPerches, trajectory, frameRange, numFrames, timeRange, boundsMin, boundsMax):
-    if frameRange[1]-frameRange[0] > TRAJ_SAVE_MINLEN:      
+    if frameRange[1]-frameRange[0] > PERCH_SAVE_MINLEN:
 
         # Compute average
         avg = np.nanmean(np.array([f.pos for f in trajectory if f.frame >= frameRange[0] and f.frame < frameRange[1]]), axis=0)
