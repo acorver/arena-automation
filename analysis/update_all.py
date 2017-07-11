@@ -23,6 +23,7 @@ from postprocessing import extract_log_info
 from postprocessing import extract_headmovements
 from postprocessing import create_highspeed_links
 from postprocessing import plot_takeoffs
+from postprocessing import extract_markersets
 from postprocessing import merge_daily_data
 
 from shared import util
@@ -64,11 +65,14 @@ def updateAll_p2(settings):
     # After FlySim trajectories have been extracted, we can process perching locations
     extract_perching_locations.run(async=False, settings=settings)
 
+    # Extract markersets (for ease of use, and used in some other scripts)
+    extract_markersets.run(async=False, settings=settings)
+
     # extract_perching_orientations.run(async=True)
     # extract_headmovements.run()
 
     print("Done processing data, now plotting takeoffs.")
-    plot_takeoffs.run(async=False, settings=settings)
+    #plot_takeoffs.run(async=False, settings=settings)
     create_highspeed_links.run(async=False, settings=settings)
 
     # Generate the final report
@@ -83,14 +87,25 @@ def updateAll(settings):
     # Create daily files (by default, we now always compute the data over entire days, rather than segments)
     merge_daily_data.run(settings)
 
+    # Now ensure that the file indices have been corrected, and an index has been created...
+    # If we don't do this first, in theory the parallel p1 and p2 processes might try to do this
+    # at the same time and conflict...
+    for file in settings.files:
+        util.countRecords(file)
+
+    # Notify
+    print("Finished preparing data, now starting processing...")
+
+    # One part of the parallel processing stream... (The raw camera data stream)
+    p2 = multiprocessing.Process(target=updateAll_p2, args=(settings,))
+
     # Run other scripts (in parallel where possible, hence part 1 (p1) and part 2 (p2)
     p1 = multiprocessing.Process(target=updateAll_p1, args=(settings,))
-    p1.start()
-
-    p2 = multiprocessing.Process(target=updateAll_p2, args=(settings,))
-    p2.start()
 
     # Wait for subprocesses to finish
+    p1.start()
+    p2.start()
+
     p1.join()
     p2.join()
 
