@@ -26,7 +26,7 @@ from shared import util
 # Set "overwrite" to True to overwrite existing files
 OVERWRITE = False
 
-SINGLE_FILE = "" #"2016-11-11 12-20-41_Cortex.msgpack"
+SINGLE_FILE = None
 
 # Misc. constants
 CORTEX_NAN  = 9999999
@@ -38,6 +38,7 @@ def processFile(file):
         if OVERWRITE or not os.path.isfile( outfile ):
             i = 0
             with open(outfile, 'w') as fo:
+                fo.write("time,filename,markerset,frame,x,y,z\n")
                 with open(file,'rb') as f:
                     filename = file
                     if '/' in filename:
@@ -51,7 +52,8 @@ def processFile(file):
                                 # Extract marker points
                                 pos = np.nanmean([[z if z!=CORTEX_NAN else float('NaN') for z in y] 
                                     for y in b[1]], axis=0)
-                                fo.write(','.join([dt, filename, str(b[0]), str(x[0])] + [str(y) for y in pos]) + '\n')
+                                a = str(b[0]).replace('b','').replace("'",'')
+                                fo.write(','.join([dt, filename, a, str(x[0])] + [str(y) for y in pos]) + '\n')
                         i+=1
                         if ((i%1000000)==0): 
                             print("[" + file + "] Processed "+str(i)+" frames")
@@ -61,15 +63,17 @@ def processFile(file):
         print(str(e))
         os.remove(outfile)
 
-def run(async=False):
-    if SINGLE_FILE == "":
-        settings = util.askForExtractionSettings()    
+def run(async=False, settings=None):
+
+    if SINGLE_FILE is None:
+        if settings is None:
+            settings = util.askForExtractionSettings(allRecentFilesIfNoneSelected=True)
 
         if len(settings.files) > 1:
-            with multiprocessing.Pool(processes=12) as pool:
+            with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
                 (pool.map_async if async else pool.map)(processFile, settings.files)
                 return pool
-        else:
+        elif len(settings) == 1:
             processFile(settings.files[0])
     else:
         processFile(SINGLE_FILE)
