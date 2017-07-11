@@ -1,4 +1,6 @@
 
+#define INVERT_TEENSY_SIGNAL_PIN true
+
 #define PIN_AMPLIFIED 4
 #define PIN_TEENSY_SIGNAL 21
 #define PIN_CLOCK_SIGNAL 1
@@ -20,12 +22,12 @@ void onClockEdge() {
     
     // Write TTL pulse
     digitalWrite(PIN_AMPLIFIED, HIGH);
-    digitalWrite(PIN_TEENSY_SIGNAL, HIGH);
+    digitalWrite(PIN_TEENSY_SIGNAL, INVERT_TEENSY_SIGNAL_PIN?LOW:HIGH);
     
     delayMicroseconds(SIGNAL_DURATION_MS * 1000);
     
     digitalWrite(PIN_AMPLIFIED, LOW);
-    digitalWrite(PIN_TEENSY_SIGNAL, LOW);
+    digitalWrite(PIN_TEENSY_SIGNAL, INVERT_TEENSY_SIGNAL_PIN?HIGH:LOW);
     
     Serial.println("!");
     
@@ -45,7 +47,7 @@ void setup() {
   pinMode(PIN_AMPLIFIED, OUTPUT);
   pinMode(PIN_TEENSY_SIGNAL, OUTPUT);
   digitalWrite(PIN_AMPLIFIED, LOW);
-  digitalWrite(PIN_TEENSY_SIGNAL, LOW);
+  digitalWrite(PIN_TEENSY_SIGNAL, INVERT_TEENSY_SIGNAL_PIN?HIGH:LOW);
 
   // Attach interrupt listening for clock edge
   attachInterrupt(digitalPinToInterrupt(PIN_CLOCK_SIGNAL), onClockEdge, RISING); 
