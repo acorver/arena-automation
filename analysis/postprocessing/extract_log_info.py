@@ -36,7 +36,7 @@ def processFile(dataFile):
     
     with open(fnameOut, 'w') as fo:
         # Write header
-        fo.write('timestamp, time, speed, height, wait\n')
+        fo.write('timestamp, time, speed, speedchange, height, wait\n')
 
         # Open log database
         conn = sqlite3.connect(file)
@@ -49,7 +49,11 @@ def processFile(dataFile):
         except:
             print("ERROR: Can't process file: "+file+" (potentially outdated log format)")
             return
-    
+
+        with open(fnameLogOut, 'w') as foLog:
+            for row in rows:
+                foLog.write('\t'.join([str(x) for x in row]) + '\n')
+
         # Get flysim log
         logFlysim = []
         buf = ''
@@ -61,11 +65,6 @@ def processFile(dataFile):
                     logFlysim.append( (r[1], buf[0:buf.find('\r\n')]) )
                     buf = buf[buf.find('\r\n')+2:]
         
-        # Write log to file
-        with open(fnameLogOut, 'w') as foLog:
-            for line in logFlysim:
-                foLog.write(','.join([str(x) for x in list(line)]) + '\n')
-        
         # Process flysim log (TODO: Parse new JSON format!!)
         lookForNewTrial = False
         for line in logFlysim:
@@ -73,23 +72,32 @@ def processFile(dataFile):
             if 'Started new trial' in line[1]:
                 lookForNewTrial = True
             if lookForNewTrial:
+                s = None
                 try:
                     s = json.loads(line[1])
-                    g = [abs(s['TargetVelX_Segments'][0]),
+                except Exception as e:
+                    pass
+                if s is not None:
+                    istart = 0
+                    if abs(s['PosX']-s['MaxPosX']) < abs(s['PosX']-s['MinPosX']):
+                        istart = len(s['TargetVelX_Segments'])-1
+                    g = [abs(s['TargetVelX_Segments'][istart]),
+                         s['TargetVelX_Segments'][(len(s['TargetVelX_Segments'])-1)-istart] -
+                            s['TargetVelX_Segments'][istart],
                          s['TargetPosZ1'],
                          int(s['TimeUntilTrial'])/1000]
                     actualTrialStart = line[0] + g[2]
                     fo.write(','.join([str(x) for x in
                          [actualTrialStart, getTimeStr(actualTrialStart), ] + list(g)]) + '\n')
                     lookForNewTrial = False
-                except Exception as e:
-                    pass
             # Deprecated trial format (kept here to parse older log files)
             m = re.match('Started new trial: speed=([0-9]*), height=([0-9]*), wait=([0-9]*)', line[1])
             if m != None:
                 g = m.groups()
                 actualTrialStart = line[0] + int(g[2])*1000
-                fo.write( ','.join([str(x) for x in [actualTrialStart, getTimeStr(actualTrialStart), ] + list(g)]) + '\n' )
+                g = list(g)
+                g = [g[0], g[0], g[1], g[2]]
+                fo.write( ','.join([str(x) for x in [actualTrialStart, getTimeStr(actualTrialStart), ] + g]) + '\n' )
     
     print("Processed file: "+file)
 
