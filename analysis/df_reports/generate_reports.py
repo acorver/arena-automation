@@ -55,14 +55,14 @@ from shared import trajectories
 DIR_REPORTS         = '../../reports/'
 DIR_DATA            = ''
 SINGLEFILE          = ''
-OVERWRITE           = False
+OVERWRITE           = True
 SHOW_3DCANVAS       = False
 IMG_DPI             = 200
 PLOT_APPEND_BEFORE  = 25
 PLOT_APPEND_AFTER   = 200
 RENDER_SIZE_3D      = (1400, 1000)
 DEBUG               = False
-SYNCHRONOUS         = True
+SYNCHRONOUS         = False
 
 PLOT_TRAJECTORIES_3D_NUMFRAMES = 200
 
@@ -100,6 +100,7 @@ def getDataPerches(data):
     fname = DIR_DATA + data['file'].replace('.msgpack','.perches.csv')
     d = pd.read_csv( fname )
     d.numframes = pd.to_numeric(d.numframes, errors='coerce').fillna(0).astype('int')
+    d = d[d.numframes>=200]
     return d
 
 # ========================================================
@@ -312,52 +313,173 @@ def plotTrajectories3DInteractive(dir, data):
 
     fname = data['file']
 
-    #takeoffs = trajectories.getTakeoffData(fname)
-    #takeoffs = takeoffs.as_matrix(['x','y','z'])
-    #flysim = pd.read_csv(fname.replace('.msgpack', '') + '.flysim.csv')
-    #flysim = flysim.rename(columns=lambda x: x.strip())
-    #tracking = pd.read_csv(fname.replace('.msgpack', '') + '.flysim.tracking.csv')
-    #tracking = tracking[tracking.trajectory.isin(flysim.flysimTraj[flysim.is_flysim])]
-    #tracking = tracking.as_matrix(['x','y','z'])
-
     mocap = pd.read_csv(fname.replace('.raw.msgpack','').replace('.msgpack','')+'.mocap.all.csv')
 
     # ===================================================
     # Helper function
     # ===================================================
 
-    def _plot(d, suffix=''):
-        takeoffs = d[d.type == 'yf_center'][::3].as_matrix(['x', 'y', 'z'])
-        flysim = d[d.type == 'flysim'][::3].as_matrix(['x', 'y', 'z'])
+    def _plot(d, suffix='', embed=True, all=False, reduce=2, metadata={}, quiver=True):
+        os.makedirs(os.path.join(dir, 'snippets/'), exist_ok=True)
+
+        takeoffs = d[d.type == 'yf_center'][::reduce].as_matrix(['x', 'y', 'z'])
+        takeoffs = takeoffs[~np.isnan(takeoffs).any(axis=1)]
+        flysim = d[d.type == 'flysim'][::reduce].as_matrix(['x', 'y', 'z'])
         flysim = flysim[~np.isnan(flysim).any(axis=1)]
 
-        p3.figure(width=1000, height=600)
-        if takeoffs.shape[0] > 0:
-            p3.scatter(takeoffs[:, 0], takeoffs[:, 1], takeoffs[:, 2], size=0.40, color='#222')
-        if flysim.shape[0] > 0:
-            p3.scatter(flysim[:, 0], flysim[:, 1], flysim[:, 2], size=0.15, color='#a22')
+        p3.figure(width=1000, height=600, camera_control='trackball',
+                  xlabel='x', ylabel='z', zlabel='y')
 
-        fnameOut = os.path.join(dir, '_tmp.html')
-        p3.save(fnameOut, copy_js=True, makedirs=True)
-        with open(fnameOut, 'r') as f:
-            c = f.read().replace('"', '&quot;')
-            k = 'snippets_takeoffs'+suffix
-            if k not in data:
-                data[k] = c
+        if all:
+            a = d[::reduce].as_matrix(['x','y','z'])
+            a = a[~np.isnan(a).any(axis=1)]
+            p3.scatter(a[:, 0], a[:, 2], a[:, 1], size=0.15, color='#999')
+
+        if takeoffs.shape[0] > 0:
+            for _, t in d[(d.type=='yf_center')&
+                    (~np.isnan(d.as_matrix(['x','y','z'])).any(axis=1))].groupby('trajectory'):
+                x = np.tile(t.as_matrix(['x','y','z'])[0,:], (2,1))
+                p3.scatter(x[:,0], x[:,2], x[:,1], size=1.0, color='#f00')
+
+                to = t[::20].as_matrix(['x','y','z'])
+                gr = np.diff(to, axis=0)
+
+                if quiver:
+                    p3.quiver(to[:, 0], to[:, 2], to[:, 1],
+                              gr[:, 0], gr[:, 2], gr[:, 1], size=3.00, color='#22a')
+
+            p3.scatter(takeoffs[:, 0], takeoffs[:, 2], takeoffs[:, 1], size=0.40, color='#222')
+
+        if flysim.shape[0] > 0:
+            p3.scatter(flysim[:, 0], flysim[:, 2], flysim[:, 1], size=0.3, color='#a22')
+
+        # Determine the right filename to use
+        fnameOut = os.path.join(dir, 'snippets/takeoff' + suffix + '.html')
+        k = 'snippets_takeoffs' + suffix
+        i = 0
+        if k in data and isinstance(data[k], list):
+            i = len(data[k])
+        fnameOutMod = fnameOut.replace('.html','_'+str(i)+'.html') if i > 0 else fnameOut
+
+        # If we're embedding, write to the main directory, as we're deleting anyway...
+        # This also copies the .js file to the right directory
+        if embed:
+            fnameOut.replace('snippets/','')
+
+        # Save the html to file
+        print("Writing: "+fnameOutMod)
+        p3.save(fnameOutMod, copy_js=True, makedirs=True)
+
+        # Save the filename or file contents to the 'data' variable, which will be used
+        # to generate the index.html file.
+        if not embed:
+            c = fnameOutMod
+        else:
+            with open(fnameOutMod, 'r') as f:
+                c = f.read().replace('"', '&quot;')
+            # We don't need the HTML snippet anymore
+            os.remove(fnameOutMod)
+
+        # In addition to the file contents/url, save any metadata
+        keycontent = [(k, c)]
+        for key, content in metadata.items():
+            keycontent.append( (key, content) )
+        for key, content in keycontent:
+            if key not in data:
+                data[key] = content
             else:
-                if not isinstance(data[k], list):
-                    data[k] = [data[k], c]
+                if not isinstance(data[key], list):
+                    data[key] = [data[key], content]
                 else:
-                    data[k].append(c)
-        os.remove(fnameOut)
+                    data[key].append(content)
+
+    # ===================================================
+    # Plot FlySim (sparsely)
+    # ===================================================
+
+    fnt = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.flysim.tracking.csv'
+    flysim = trajectories.getFlysims(fname)
+    if os.path.isfile(fnt) and flysim is not None:
+
+        d = pd.read_csv(fnt)
+        d = d[d.trajectory.isin(flysim.flysimTraj)]
+        if len(d) > 0:
+            d.loc[:, 'type'] = 'flysim'
+            _plot(d, '_flysim', reduce=8)
+
+        # ===============================================
+        # Plot non-flysim unID'ed marker trajectories
+        # ===============================================
+
+        d = pd.read_csv(fnt)
+        d = d[~d.trajectory.isin(flysim.flysimTraj)]
+        if len(d) > 0:
+            d.loc[:, 'type'] = 'flysim'
+            _plot(d, '_nonflysim', reduce=8)
+
+    # ===================================================
+    # Plot all flythrough trajectories, no matter how short, or
+    # how little perching occurred
+    # ===================================================
+
+    # Plot all trajectories
+    fn  = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.takeoffs.csv'
+    fnt = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.tracking.csv'
+    d = pd.read_csv(fnt)
+    if len(d) > 0:
+        d.loc[:, 'type'] = 'yf_center'
+
+        md = [
+            'takeoff_individual_rejected_startframe',
+            'takeoff_individual_rejected_endframe',
+            'takeoff_individual_rejected_trajectory',
+            'takeoff_individual_rejected_time'
+        ]
+
+        print("Plotting rejected flights")
+        g = d.groupby('trajectory')
+        i = 0
+        for _, t in g:
+            if t.shape[0] > 0:
+                if not t.frame.isin(mocap.frame).any():
+                    print("Plot individual rejected...")
+                    _plot(t, '_individual_rejected', embed=False,
+                          metadata={ md[0]: t.frame.min(),
+                                     md[1]: t.frame.max(),
+                                     md[2]: t.trajectory.iloc[0],
+                                     md[3]: t.time.iloc[0]})
+                    i += 1
+
+        for mdk in md:
+            if not mdk in data: data[mdk] = []
+
+        print("Plotting all flights")
+        _plot(d, '_allflights', reduce=10, quiver=False)
 
     # ===================================================
     # Plot each trajectory individually
     # ===================================================
 
+    md = [
+        'takeoff_individual_startframe',
+        'takeoff_individual_endframe',
+        'takeoff_individual_trajectory',
+        'takeoff_individual_time'
+    ]
+
     g = mocap.groupby('trajectory')
-    for i in range(len(g)):
-        _plot(g.nth(i), '_individual')
+    i = 0
+    for _, t in g:
+        if t.shape[0] > 0:
+            _plot(t, '_individual', embed=False, all=True,
+                  metadata={md[0]: t.frame.min(),
+                            md[1]: t.frame.max(),
+                            md[2]: t.trajectory.iloc[0],
+                            md[3]: t.time.iloc[0]})
+            i += 1
+
+    for mdk in md:
+        if not mdk in data: data[mdk] = []
 
     # ===================================================
     # Plot all takeoffs
@@ -365,6 +487,39 @@ def plotTrajectories3DInteractive(dir, data):
 
     _plot(mocap)
 
+    # ===================================================
+    # Plot all markers in frames that were neither rejected nor accepted...
+    # ===================================================
+
+    fnt = fname.replace('.raw.msgpack', '').replace('.msgpack', '') + '.tracking.csv'
+    xyz = fnt.replace('.tracking.csv', '.xyz.csv')
+    if os.path.isfile(xyz):
+        d = pd.read_csv(fnt)
+        d.loc[:, 'type'] = 'yf_center'
+        dxyz = pd.read_csv(xyz)
+        dxyz = dxyz[dxyz.markerset.str.contains('yframe', case=False, regex=False)]
+        dxyz = dxyz[~dxyz.frame.isin(d.frame)]
+        dxyz.loc[:, 'type'] = 'yf_center'
+        dxyz.loc[:, 'trajectory'] = -1
+
+        _plot(dxyz, '_nontrajectory')
+
+    # ===================================================
+    # Hack: Fix a few things in ipyvolume:
+    # ===================================================
+
+    for prefix in ['', 'snippets/']:
+        fnameIpyvol = os.path.join(dir, prefix+'ipyvolume.js')
+        if os.path.exists(fnameIpyvol):
+            with open(fnameIpyvol, 'r', encoding="utf8") as f:
+                ipyvol = f.read()
+                ipyvol = ipyvol.replace(
+                    'this.control_trackball.noPan = true;',
+                    'this.control_trackball.noPan = false;')
+            with open(fnameIpyvol, 'w', encoding="utf8") as f:
+                f.write(ipyvol)
+
+    # Done!
     pass
 
 # ========================================================
@@ -568,10 +723,10 @@ def processFile(file):
 
         # Generate data
         for f in [ \
-            plotTrajectories3DInteractive, #plotTrajectories3D,
-            #plotTrajectoryProperties, plotDailyActivity,
-            #plotTrialStatistics, plotFlysim3D, plotPerchingLocations2D, \
-            loadMetadata]:
+            plotTrajectories3DInteractive,
+            plotTrajectoryProperties, plotDailyActivity,
+            plotTrialStatistics, plotFlysim3D, plotPerchingLocations2D, \
+            loadMetadata, plotTrajectories3D]:
             # Due to missing data, etc., some functions occasionally fail. However, we don't want this to crash
             # the generation of the remaining part of the report, so catch and report any exception here
             if DEBUG:
@@ -581,6 +736,8 @@ def processFile(file):
                     # Compute data
                     f(dir, data)
                 except Exception as e:
+                    print(str(e))
+                    traceback.print_exc()
                     # Log this error, so it can be displayed in the HTML report
                     data['errors'].append( str(e) )
                     # Log to an error log file as well
@@ -591,6 +748,9 @@ def processFile(file):
         with open(outFile, 'w') as fo:
             fo.write(template.render(data).replace(u'\ufeff',u''))
     except Exception as e:
+        if DEBUG:
+            raise
+        traceback.print_exc()
         print(e)
     
 # ========================================================
