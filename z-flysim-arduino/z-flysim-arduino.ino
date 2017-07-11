@@ -122,7 +122,6 @@ void setup() {
   // Wait for serial to connect
   Serial1.begin(115200);
   Serial.begin(115200);
-  while(!Serial) { delay(1); }
   
   // IMPORTANT NOTE:
   //    PIN_ENCODER_A and PIN_ENCODER_B should *NOT* be configured as INPUT (or any other 
