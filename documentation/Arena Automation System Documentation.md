@@ -282,9 +282,58 @@ for the wand, which would increase calibration errors.
 
 ###\. post-processing
 
-####\. Automatic post-processing
+####\. Automatic, single-click post-processing
 
-1. To commence post-processing, ...
+1. To commence post-processing, navigate to the "*arena-automation*" directory, and click the "*.bat*" file "*auto-update-analysis.bat*".
+
+1. This will merge recording fragments taken on a given day into a single directory and data file for each day.
+
+1. It will subsequently do the following:
+
+    2. **Correct frame indices:** This ensures that each
+        Mocap frame has a unique frame ID. Duplicate indexes are created when Cortex is restarted, either as a result of clicking the start/stop recording button, or by closing and re-opening the Cortex program.
+
+    2. **Extract raw (.vc) camera data**: The raw cameras data is gathered from data files in the Cortex data directory. The raw camera data is then indexed by *uncorrected* frameID and timestamp, and is then matched to the *corrected* frameIDs above.
+
+        The Cortex data is then integrated into a new "*.msgpack*" data file (with the new extension "*.raw.msgpack*"), that now contains both XYZ and raw XY camera data. The Arena Automation System contains a utility script (util.py) to easily browse this raw data.
+
+    2. **Extract mocap (LED) triggers**: The system then searches for a signal from the LED Sync Box, and saves recognized triggers to file.
+
+        By default, the search system will only search for LED Sync signals that occur close in time to the trigger timestamps saved by the core *ArenaAutomation.exe* program in the real time log file.
+
+        However, the script can be easily switched to searching for triggers in all files, though this will take a few hours for an all-day recording.
+
+    2. **Extract real-time log**: The "*ArenaAutomation.exe*" software write a log file during its real-time processing. This log file contains such things as detected takeoffs, any hardware triggers sent, presented trials, state of internal buffers, etc. During extraction, this log is converted from an internal SQL database format to a plain text file. In addition, the FlySim trials log output is parsed, and a "*.trials.csv*" file is produced with statistics on e.g. height and velocity of presented trials.
+
+    2. **Extract FlySim trajectories**: The system then searches for FlySim trajectories. The key signature of a FlySim trajectory is a series of markers (unidentified by Cortex) that are contiguous in space and time. The system currently further checks for linearity, but this condition can be removed if in the future non-linear trajectories are used.
+
+    2. **Extract takeoffs / perching locations**: The system then searches for Yframe trajectories, in particular those that are preceded by a few (currently at least 2) seconds of perching. This way, we can quickly distinguish between trajectories that merely correspond to a dragonfly flying through the volume, versus those where a dragonfly actually pursued a prey.
+
+        Conversely, the system saves those datapoints at which the dragonfly was sitting still, prior to takeoff. This can be used to plot heatmaps of preferred perching locations, etc.
+
+    2. **Extract telemetry**: The system then searches for telemetry files (in the default telemetry data directory) corresponding to the mocap data in the "*.msgpack*" master file. This correspondence is based on timestamp.
+
+        The relevant "*.meta*", "*.bin*", and "*.bug3*" files are post-processed into a single, trigger-aligned table.
+
+        Subsequently, the system searches for matches between the mocap (LED) triggers, and the telemetry triggers, based on system clock timestamps. When a match is found, the telemetry and mocap data are time-aligned into a single table, and this table is saved as a "*.csv*" file. This file will likely form the basis of most analyses, and represents the key output of the entire automation system.
+
+    2. **Extract high-speed video**: Subsequently, the system will look for high-speed video files that occurred at the same time as the mocap trigger (again based on system clock timestamps), and merges the filename of the corresponding high-speed video file into the "*.csv*" output of the telemetry extraction step.
+
+        _**At this point, the most important analyses are essentially done!**_   
+
+    2. **Generate reports**: Subsequently, the system will generate HTML reports that interactively present the detected takeoff (and FlySim) trajectories. This allows quick debugging of the processing pipeline, and gives one a sense of what happened in the arena.
+
+        In addition, the reports include heatmaps of perching locations, and statistics about the types of FlySim trials that were presented.
+
+        The HTML report system is highly extensible, and different types of plots can be added in the future.
+
+    2. **Extract markersets**: Independently of the other scripts, the system will also output a "\*.csv" file containing the XYZ locations of various markers, as well as the corresponding markerset name. This allows easy plotting of e.g. Yframe trajectories in e.g. Matlab. Note that all this information is contained in the "*.msgpack*" files, and this "\*.csv" file is therefore redundant.
+
+####\. Automatic post-processing of individual output types
+
+In addition to running all these post-processing steps automatically, each step can be run independently. This is useful when updating or debugging scripts, as it allows quickly re-running a script without needing to re-run all others.
+
+The easiest way to debug and run individual files is using the IDE. See the section "Debugging and Running the Python Code."
 
 ####\. Manual post-processing of Photron 3D calibration and real prey-capture
 
@@ -412,10 +461,23 @@ e.g. their title bar. Then press SHIFT-R to recompute XYZ coordinates.
 
 1. TODO
 
+###\. The final output data files
+
+At the end of all post-processing, you will (or can, if the relevant script was executed) encounter the following files in the main data directory:
+
+* ...
+* ...
+* ...
+* ...
+
 ##\. Technical documentation
 ###\. About the documentation
 The documentation is written in Pandoc-flavored Markdown. A good reference on this flavor
 of Markdown can be found **[here](http://rmarkdown.rstudio.com/authoring_pandoc_markdown.html)**.
+
+###\. Hardware wiring diagram
+
+![](images/arena_diagram.png)
 
 ###\. High-level overview
 The _Arena Automation System_ consists of roughly two
@@ -487,18 +549,7 @@ from the mass of data collected by the real-time system.
 
 The offline pipeline consists of many scripts (written in
 Python) that each extract a particular type of information
-from the raw recordings. Here is an overview:
-
-| Tables                | Are                     | Cool    |
-| ------------- |:-------------:| -----:|
-| col 3 is            | right-aligned | $1600 |
-| col 2 is            | centered            |     $12 |
-| zebra stripes | are neat            |        $1 |
-
-Each of these scripts can be run independently,
-facilitating easier experimentation with new
-analyses, and allowing subsets of the analysis to be
-updated without re-running the whole pipeline.
+from the raw recordings. Each of these scripts can be run independently, facilitating easier experimentation with new analyses, and allowing subsets of the analysis to be updated without re-running the whole pipeline.
 
 In most cases, however, the pipeline will be run
 with a single click. The main script that will
@@ -518,19 +569,32 @@ recorded on the same day, under the assumption that
 a given day will only contain a single type of
 experiment.
 
-The next step is to assign to each frame a unique ID.
-Because Cortex can be stopped and restarted,
-the frame counter can be reset to 0. This step
-makes sure that in all later analyses, frameIDs
-are unique and consistent across different type of
-analysis output files.
+###\. Overview of the technology stack
 
-At the end of the entire pipeline, a few files are of
-particular interest:
+The technology stack was chosen based on the requirements of each Arena Automation subsystem.
 
-* *.mocap.csv* : ...
+####\. The real-time pipeline
+The real-time pipeline ("*ArenaAutomation.exe*") is written entirely in **C/C++**. This facilitates rapid processing.
 
-...
+####\. The real-time web interface
+The real-time web interface is mostly just an HTML front end for the API that the real-time C/C++ software exposes. The web interface Graphical User Interface (GUI) is written in HTML/Javascript. The web backend in also written in Javascript, and runs on NodeJS.
+
+####\. The post-processing pipeline
+All postprocessing scripts --- with some minor exceptions, see below --- are written in **Python 3.5**. Note that Python 2.7 and 3.5 are not compatible, and therefore future additions to the Python software have to be written in Python 3.x as well.
+
+In addition to the Python post-processing pipeline, several debugging scripts can be found in the form of **Jupyter Notebooks**. These notebooks contain Python code. _Jupyter Notebooks are the recommended way of debugging and interacting with the Arena Automation postprocessing pipeline, as they can directly call the utility libraries._
+
+The exceptions, not written in Python, are:
+
+* The Photron 3D calibration code is written in Matlab.
+
+* Some debugging scripts, which were occasionally used for quickly inspecting output files, were written in R. These scripts are in no way required by the processing pipeline, but have been kept in a few directories in case their basic content proves useful in the future.
+
+###\. Debugging and Running the Python Code
+
+The Integrated Development Environment (IDE) used to develop the post-processing (Python) pipeline is the PyCharm IDE (see below). This IDE is the best way to familiarize yourself with the different Python postprocessing scripts, as well as run, debug and edit individual scripts.
+
+![](images/pycharm_ide.png)
 
 ###\. Hardware Subsystems
 
