@@ -18,48 +18,13 @@ For more information about how to update this documentation, read the
                  _Last contribution:_ June 2017                       
 -------------- ---------------------------------------------------------
 
-<!--
-##\. Table of Contents
-* Practical step-by-step guide
-* Technical documentation:
-    * About the documentation
-    * High-level overview
-    * Overview of the technology stack
-    * Device Diagram
-    * Installation and repository structure
-    * A note on code editors
-    * Real-time software
-        * ...
-    * Real-time hardware:
-        * Trigger Signal Generator
-        * LED Trigger Signal Generator
-        * FlySim Controller
-            * FlySim Z Controller
-            * Kangaroo Controller
-        * Remote-controllable power switches
-    * Software post-processing:
-        * Overview of the processing pipeline
-        * A note on data formats
-        * FlySim extraction
-        * Takeoff trajectory extraction
-        * Telemetry extraction
-    * Unfinished work-in-progress
-        * Interfacing with Photrons
-        * CableFlysim
-        * Rotating stage
-        * Networked sign
-        *
-    * Miscellaneous tools
-        * Auto-wand tracking
-        * Arena Telemetry Assessment
-        * Test backpack
--->
-
 ##\. Practical step-by-step guide
 
 ###\. General setup
 
 1. Launch the *Arena Automation Web Interface*
+
+    **Note:** Due to a small bug, the Arena Automation Web Interface will occasionally crash after running for an extended amount of time. This does not interfere with any ongoing experiments or software, and can be fixed by simply restarting the Arena Automation Web Interface, as described here. This bug is being investigated.
 
 1. Click the following icon on the Photron PC:
 
@@ -298,6 +263,30 @@ for the wand, which would increase calibration errors.
   1. Now turn on the Transceiver power. If a backpack is in range, data should start appearing in both data graph windows.
 
   1. Every time a trigger is received, a new triplet of files (.bin, .meta and .bug3) will be written to the chosen data directory.
+
+###\. Flysim setup
+
+1. Open a Serial command interface to the FlySim controller.
+
+1. Send an "h" command the confirm this is indeed the FlySim controller.
+
+1. Send the command "z 400" to raise FlySim to a height of ~400 mm.
+
+    **Note**: Due a small bug, it appears that sometimes the FlySim Controller doesn't respond to Z commands unless a "position" command is first sent directly to the FlySim Z controller. Only one such command seems to fix the error. This bug should be fixed soon. More info below on how to interface with the FlySim Z controller.
+
+1. Now send the command "tune." Within a few seconds, you should see the motors will start to shoot the artificial bead back and forth.
+
+1. Wait approximately 60 seconds for the tuning sequence to complete.
+
+1. Now manually, or using the power interface explained above, power down the device.
+
+1. After a few seconds, power the device back on. This power cycling is required by the Kangaroo motor driver that controls the X axis, and ensures the newly calibrated settings are written to and loaded from memory.
+
+1. The next FlySim commands are best sent through the Arena Automation Web Interface.
+
+1. Be sure to close the Arduino IDE instance associated with this Serial Interface, or otherwise be sure to close the Serial command window and interface. This ensures that _ArenaAutomation.exe_ can establish a connection with the FlySim controller.
+
+1. After the Arduino IDE serial interface is closed, and _ArenaAutomation.exe_ has been started as described below, FlySim commands can be sent using the Arena Automation Web Interface, again as described below.
 
 ###\. General setup, continued
 
@@ -687,13 +676,67 @@ The Integrated Development Environment (IDE) used to develop the post-processing
 
 This section documents the capabilities of each hardware interface. In the case of Arduino-compatible interfaces, it details the available commands that are available using the Serial interface.
 
+####\. Opening a serial interface
+
+1. Open the "Arduino IDE"
+
+    ![](images/arduino_launch_icon.png)
+
+1. Open serial (/COM) port 6. **Note:** The COM port might be different than 6. We will see soon how to verify whether we selected the right port.
+
+    ![](images/arduino_com_port_any.png)
+
+    Newline settings should be set to "Newline," and the baud rate to 9600 for the devices below, unless otherwise noted.
+
+1. Open the Serial Monitor (CTRL-SHIFT-M)
+
+    ![](images/arduino_serial_monitor.png)
+
+1. In the serial monitor window that appears, type "h" followed by ENTER.
+
+1. The output will indicate what device has been connected to.
+
 ####\. Arduino interfaces
 
 Each Arduino interface is programmed according to a similar framework, which facilitates modularizing available commands, and extending them later. The available commands are listed below.
 
-#####\. FlySim
+#####\. FlySim Controller
+
+1. Connect to the FlySim controller as outlined in the section "Opening a serial interface." (Current COM Port: 6)
+
+1. The following commands are available:
+
+    2. **h**: Send a string identifying this controller
+
+    2. **z**: Send the FlySim line to a particular height (calibrated to mm). The height should be correct to within a few millimeters. If more accuracy is required, acceptable error limits should be changed in the code, and calibration values should be tuned.
+
+        **Note**: Due a small bug, it appears that sometimes the FlySim Controller doesn't respond to Z commands unless a "position" command is first sent directly to the FlySim Z controller. Only one such command seems to fix the error. This bug should be fixed soon. More info below on how to interface with the FlySim Z controller.
+
+    2. **tune**: Auto-tune the X bead. This command should be run once every day, or every few days. For the full tuning sequence, see the practical guide above.
+
+    2. TODO
+
+    2. TODO
+
 #####\. Rotating perch Controller
-#####\. FlySim
+
+1. Connect to the Rotating Perch controller as outlined in the section "Opening a serial interface." (Current COM Port: ?)
+
+#####\. TTL Trigger Controller
+
+1. Connect to the TTL Trigger controller as outlined in the section "Opening a serial interface." (Current COM Port: 4)
+
+#####\. Power Controller (1 \& 2)
+
+1. Connect to the Power controller as outlined in the section "Opening a serial interface." (Current COM Port: ?)
+
+#####\. LED Sync Controller
+
+1. Connect to the LED Sync controller as outlined in the section "Opening a serial interface." (Current COM Port: ?)
+
+#####\. FlySim Z Controller
+
+1. Connect to the FlySim Z controller as outlined in the section "Opening a serial interface." (Current COM Port: ?)
 
 ##\. Future directions
 
@@ -705,6 +748,11 @@ Each Arduino interface is programmed according to a similar framework, which fac
 
     Although the second option is preferable, the first one will be easier to implement and a good first solution.
 
-1. Fix SpikeGL bug3
+1. **Fix SpikeGL bug**: As mentioned above, currently a bug causes delays with SpikeGL triggering... This bug is being investigated right now.
 
-1. Use ArenaAutomation to interface with Photrons... evaluate trajectory to decide to actually save the data... (but always immediately trigger... Also save frame number of trigger moment... facilitates matching...)
+1. **Directly interface with Photron cameras**: The arena-automation repository contains working code to save Photron videos directly from the _ArenaAutomation.exe_ program. This has the advantage of separating Photron _triggering_ from _saving_. This way, a hardware TTL trigger can still immediately (e.g. center-) trigger the Photron cameras, but the decision whether to save the video can be made based on more data about the actual trajectory, and how likely it is to be interesting...
+
+    - To-do: Check how pre-/post-trigger time window is currently set, and how it can be changed.
+    - To-do: Check and modify the logic evaluating whether the trajectory is interesting
+
+1. ... work in progress ...
