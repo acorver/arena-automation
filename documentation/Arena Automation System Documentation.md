@@ -162,30 +162,32 @@ for the wand, which would increase calibration errors.
 1. If we are gathering real fly trajectories, or otherwise need accurate Photron 3D reconstruction, we need to
     calibrate the Photron cameras as well.
 
-    1. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
+    1. If L-frame recording is required, do the following. **Note:** This is currently not required, and the same Lframe dataset can be re-used. A secondary registration transformation will align the Cortex and Photron coordinate systems, thus overriding the L-frame.
 
-    2. Press the record button. A window pops up. Select (and create, if it doesn't already exist) a new directory for
-        this day's recordings. This directory should be in the same directory as the other Photron recording directories,
-        in order for the automatic analysis scripts to find the files. Be sure to un-select "Info Save". Relevant
-        settings are illustrated below:
+        2. Place the L-frame in the center of the arena, and place all batteries in the battery-holder to light up the 4 LEDs.
 
-        ![](images/photron_record.png)
+        2. Press the record button. A window pops up. Select (and create, if it doesn't already exist) a new directory for
+            this day's recordings. This directory should be in the same directory as the other Photron recording directories,
+            in order for the automatic analysis scripts to find the files. Be sure to un-select "Info Save". Relevant
+            settings are illustrated below:
 
-    2. The "record" button will switch to "trigger in".
+            ![](images/photron_record.png)
 
-        ![](images/photron_trigger_in.png)
+        2. The "record" button will switch to "trigger in".
 
-    2. Click it again. The button will display "recording" to indicate that frames are being recorded. After ~1 second, press
-        "Recording Done" to stop the recording
+            ![](images/photron_trigger_in.png)
 
-        ![](images/photron_recording.png)
+        2. Click it again. The button will display "recording" to indicate that frames are being recorded. After ~1 second, press
+            "Recording Done" to stop the recording
 
-    2. Switch to the "Data Save" tab, reduce the range of frames to e.g. 100, and save the file as e.g. "lframe_N.avi".
+            ![](images/photron_recording.png)
 
-        ![](images/photron_datasave_lframe.png)
+        2. Switch to the "Data Save" tab, reduce the range of frames to e.g. 100, and save the file as e.g. "lframe_N.avi".
 
-    2. Now remove the L-frame from the arena. Put the wand back in the arena --- the one we used to calibrate Cortex. As before,
-        make sure the minimum marker size and thresholds are set correctly.
+            ![](images/photron_datasave_lframe.png)
+
+        2. Now remove the L-frame from the arena. Put the wand back in the arena --- the one we used to calibrate Cortex. As before,
+            make sure the minimum marker size and thresholds are set correctly.
 
     2. Now ensure that Photron is in "Start Trigger" mode:
 
@@ -235,10 +237,67 @@ for the wand, which would increase calibration errors.
 
     2. Wave the wand in the same pattern as we used to calibrate the Cortex volume. 40-60 seconds of recording should be    sufficient.
 
-    2. Manually end both recordings by clicking the red recording button in Cortex, and clicking "recording done" in
-        Photron.
+    2. Manually end both recordings by clicking the red recording button in Cortex, and clicking "recording done" in PFV.
 
-1. We are now ready to arm Photron for recording. Make sure that
+1. We are now ready to arm Photron for recording.
+
+###\. SpikeGL setup
+
+1. If Telemetry data needs to be acquired, SpikeGL should be started as well.
+
+1. Currently two versions of SpikeGL are available.
+
+    - **2016 version**: C:/Users/leonardo/Desktop/SpikeGL_StimGL_64Bit_Qt5/
+
+    - **Most Recent version**: Z:/people/Abel/SpikeGL/release
+
+1. The 2016 version is currently most stable, but does not save sufficient data to accurately reconstruct the timing of those telemetry data frames arriving before the hardware TTL trigger.
+
+1. The most recent version does save the relevant data, and should be used in the future.
+
+    **Note**: Currently a (presumably minor) bug is causing a slowdown of the SpikeGL software, leading to delayed saving of data, making the program difficult to use. This bug is being actively investigated at the moment and this notice will be updated as soon as the fix is made.
+
+1. To start SpikeGL, run the relevant "SpikeGL.exe" executable in one of the above directories.
+
+    ![](images/spikegl_1.png)
+
+1. In the window that appears, press "b", or click "New Bug Acquisition" in the "File" menu.
+
+    ![](images/spikegl_2.png)
+
+1. Ignore "AO Device Invalid" notifications.
+
+    ![](images/spikegl_3.png)
+
+1. Configure the Telemetry Acquisition.
+
+    2. In particular, click "Browse" to choose an appropriate filename. For consistency, create a new directory in the "year-year-month-month-day-day" format, and select "year-year-month-month-day-day_telemetry_1.bin" as the filename.
+
+    2. Ensure the correct TTL line inputs are selected for recording, and that the right TTL input is selected as the trigger. The current trigger input (TTL 4) is currently selected by default.
+
+    2. Select the right prepend/append duration that will be recorded around the TTL center trigger.
+
+    2. Select the sampling rate.
+
+    2. Click "OK"
+
+    ![](images/spikegl_4.png)
+
+  1. Select "Yes" when asked to "Resume filename counting."
+
+    ![](images/spikegl_5.png)
+
+  1. Two SpikeGL windows will now appear. No data will be displayed, as the Transceiver power has not yet been turned on.
+
+    ![](images/spikegl_6.png)
+
+  1. Before turning on the Telemetry Transceiver, **ensure that the antenna is connected to the Transceiver!** If the Transceiver is turned on without a connected antenna, this can in principle seriously harm the device.
+
+  1. Ensure there are no significant metal objects in the antenna volume. Although small metal parts are ok, especially when farther removed from the antenna, large metal sheets can in theory reflect power back into the Transceiver and negatively affect its long-term performance.
+
+  1. Now turn on the Transceiver power. If a backpack is in range, data should start appearing in both data graph windows.
+
+  1. Every time a trigger is received, a new triplet of files (.bin, .meta and .bug3) will be written to the chosen data directory.
 
 ###\. General setup, continued
 
@@ -328,6 +387,43 @@ for the wand, which would increase calibration errors.
         The HTML report system is highly extensible, and different types of plots can be added in the future.
 
     2. **Extract markersets**: Independently of the other scripts, the system will also output a "\*.csv" file containing the XYZ locations of various markers, as well as the corresponding markerset name. This allows easy plotting of e.g. Yframe trajectories in e.g. Matlab. Note that all this information is contained in the "*.msgpack*" files, and this "\*.csv" file is therefore redundant.
+
+#####\. The final output data files
+
+Relevant data files can be found in the following directories:
+
+1. **Behavior video data directory**: Z:/data/dragonfly/behavior video/< date >/
+1. **Telemetry data directory**: Z:/data/dragonfly/telemetry/< date >/
+1. **Main data directory**: Z:/people/Abel/arena-automation/data/< date >/
+
+At the end of all post-processing, you will (or can, if the relevant script was executed) encounter the following files in the main data directory:
+
+* **< date >.msgpack**: The original data file
+* **< date >.log**: The original log file
+
+* **< date >.msgpack.index**: The index file that is always created when any script accesses the .msgpack files. The index facilitates randomly accessing frame by frame index and timestamp.
+
+* **< date >.takeoffs.csv**: This file contains the frame ranges of the putative takeoff events.
+* **< date >.tracking.csv**: This file is associated with the _.takeoffs.csv_ file, and contains XYZ marker data for the takeoff events in question.
+
+* **< date >.mocap.csv**: This file contains only those trajectories deemed to be genuine takeoff trajectories of interest --- based on the span of the trajectory, and the duration of perching just prior to takeoff. It is essentially a subset of _.tracking.csv_. It includes all three vertices of the Yframe, as well as FlySim data.
+* **< date >.mocap.all.csv**: This file contains all the data in _.mocap.csv_, but also includes all other unidentified XYZ markers.
+
+* **< date >.perches.csv**: This file is the dual of _.takeoffs.csv_, and contains stretches of continuous perching.
+
+* **< date >.perch_objects.csv**: This file contains locations of the recognized perch object markersets. This file is not used much anymore, but can be used to easily plot the locations of the perches.
+
+* **< date >.flysim.csv**: This file is generated by the FlySim trajectory detection script. It contains frame ranges of putative FlySim trajectory events.
+* **< date >.flysim.tracking.csv**: This file is associated with the _.flysim.csv_ file, and contains XYZ marker data for the flysim trajectories in question.
+
+* **< date >.log.txt**: This file contains the same information as _\*.log_ files, but in plain text format.
+* **< date >.trials.csv**: This file is extracted from the _*.log_ files, and contains statistics on FlySim trajectory delay, height, velocity and velocity speedup, as reported by FlySim.
+
+* **vc.sqlite**: Temporary file containing all raw (\*.vc) camera data gathered by Cortex. This file can be deleted.
+* **< date >.raw.msgpack**: Contains the same data as the .msgpack file, as well as the \*.vc data in "vc.sqlite".
+* **< date >.raw.msgpack.index**: An index file for the \*.raw file.
+
+* **< date >\_N.telemetry.csv**: These files contain the processed telemetry data. They can be regenerated from the .bin/.meta/.bug3 files in the telemetry data directories, and can therefore be deleted if the memory space they take up is an issue. Because they represent binary data in text format, their memory footprint is necessarily larger than the original raw binary files. However, they make telemetry analysis significantly easier.
 
 ####\. Automatic post-processing of individual output types
 
@@ -461,15 +557,6 @@ e.g. their title bar. Then press SHIFT-R to recompute XYZ coordinates.
 
 1. TODO
 
-###\. The final output data files
-
-At the end of all post-processing, you will (or can, if the relevant script was executed) encounter the following files in the main data directory:
-
-* ...
-* ...
-* ...
-* ...
-
 ##\. Technical documentation
 ###\. About the documentation
 The documentation is written in Pandoc-flavored Markdown. A good reference on this flavor
@@ -598,12 +685,26 @@ The Integrated Development Environment (IDE) used to develop the post-processing
 
 ###\. Hardware Subsystems
 
-###\. Software processing
-This section details the various scripts that
-extract content from
+This section documents the capabilities of each hardware interface. In the case of Arduino-compatible interfaces, it details the available commands that are available using the Serial interface.
 
-####\. Overview of the processing pipeline
+####\. Arduino interfaces
 
-Cortex frame received, streamed to file
+Each Arduino interface is programmed according to a similar framework, which facilitates modularizing available commands, and extending them later. The available commands are listed below.
 
-Cortex frame re-indexed to prevent index conflicts
+#####\. FlySim
+#####\. Rotating perch Controller
+#####\. FlySim
+
+##\. Future directions
+
+1. **Facilitate manually processing selective frame ranges in Cortex.**: Given that Cortex data files are automatically saved, it is possible to process any events that occur directly in Cortex. There are two approaches:
+
+    - For every takeoff event, include the Cortex filename (_".cap"_) and frame range of the event. The user can then manually open the relevant file and navigate to the correct framerange.
+
+    - For every trajectory, create a new Cortex file with just the relevant framerange.
+
+    Although the second option is preferable, the first one will be easier to implement and a good first solution.
+
+1. Fix SpikeGL bug3
+
+1. Use ArenaAutomation to interface with Photrons... evaluate trajectory to decide to actually save the data... (but always immediately trigger... Also save frame number of trigger moment... facilitates matching...)
